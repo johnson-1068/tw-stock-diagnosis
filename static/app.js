@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
         "主動統一升級50": "00403A", "統一升級50": "00403A", "統一升級": "00403A",
         "元大高股息": "0056", "高股息": "0056",
         "群益台ESG低碳50": "00923", "群益低碳50": "00923", "ESG低碳50": "00923", "台ESG低碳50": "00923", "ESG低碳": "00923",
-        "南亞": "1303", "大魯閣": "1432", "台積電": "2330", "南亞科": "2408", "力積電": "6770",
+        "南亞": "1303", "大魯閣": "1432", "大鲁閣": "1432", "大鲁阁": "1432", "玩股": "1432", "玩": "1432", "台積電": "2330", "南亞科": "2408", "力積電": "6770",
         "元大台灣50": "0050", "台灣50": "0050", "國泰永續高股息": "00878", "永續高股息": "00878",
         "復華台灣科技優息": "00929", "科技優息": "00929", "群益台灣精選高息": "00919", "元大台灣價值高息": "00940"
     };
@@ -299,17 +299,32 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         document.querySelectorAll('.input-cost').forEach(input => {
-            input.addEventListener('change', (e) => {
+            const handleCostChange = (e) => {
                 const idx = parseInt(e.target.dataset.idx);
-                currentHoldings[idx].cost = parseFloat(e.target.value) || 0;
-            });
+                let rawVal = parseFloat(e.target.value) || 0;
+                if (currentHoldings[idx]) {
+                    const corrected = fixTaiwanStockCost(currentHoldings[idx].code, rawVal);
+                    currentHoldings[idx].cost = corrected;
+                    if (e.type === 'blur' || e.type === 'change') {
+                        e.target.value = corrected;
+                    }
+                }
+            };
+            input.addEventListener('input', handleCostChange);
+            input.addEventListener('change', handleCostChange);
+            input.addEventListener('blur', handleCostChange);
         });
 
         document.querySelectorAll('.input-shares').forEach(input => {
-            input.addEventListener('change', (e) => {
+            const handleSharesChange = (e) => {
                 const idx = parseInt(e.target.dataset.idx);
-                currentHoldings[idx].shares = parseInt(e.target.value) || 1000;
-            });
+                let rawVal = parseInt(e.target.value) || 1000;
+                if (currentHoldings[idx]) {
+                    currentHoldings[idx].shares = rawVal > 0 ? rawVal : 1000;
+                }
+            };
+            input.addEventListener('input', handleSharesChange);
+            input.addEventListener('change', handleSharesChange);
         });
 
         document.querySelectorAll('.btn-remove-row').forEach(btn => {
@@ -319,6 +334,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderHoldingsTable();
             });
         });
+    }
+
+    // Synchronize latest DOM table inputs into currentHoldings state
+    function syncHoldingsFromTable() {
+        const rows = holdingsTableBody.querySelectorAll('tr');
+        const list = [];
+        rows.forEach((tr) => {
+            const codeEl = tr.querySelector('.input-code');
+            const nameEl = tr.querySelector('.input-name');
+            const costEl = tr.querySelector('.input-cost');
+            const sharesEl = tr.querySelector('.input-shares');
+            if (codeEl) {
+                const code = codeEl.value.trim();
+                let name = nameEl ? nameEl.value.trim() : '';
+                let rawCost = parseFloat(costEl?.value) || 0;
+                let rawShares = parseInt(sharesEl?.value) || 1000;
+                if (code) {
+                    let cost = fixTaiwanStockCost(code, rawCost);
+                    if (costEl && rawCost !== cost) costEl.value = cost;
+                    list.push({
+                        code: code,
+                        name: name || stockCodeToName[code] || code,
+                        cost: cost > 0 ? cost : 100.0,
+                        shares: rawShares > 0 ? rawShares : 1000
+                    });
+                }
+            }
+        });
+        if (list.length > 0) {
+            currentHoldings = list;
+        }
+        return currentHoldings;
     }
 
     // Add & Clear buttons
@@ -514,6 +561,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Smart Auto-Decimal Correction for Taiwan Stock Costs
+    function fixTaiwanStockCost(code, rawCost) {
+        let c = parseFloat(rawCost) || 0;
+        if (c <= 0) return 100.0;
+        const codeStr = String(code).trim();
+
+        // High-priced stocks (e.g. 2330 台積電, 2454 聯發科, 3008 大立光, 6669 緯穎)
+        if (['2330', '2454', '3008', '6669', '3661', '5274', '3529', '2382'].includes(codeStr)) {
+            if (c > 10000) c = c / 100.0;
+            return parseFloat(c.toFixed(2));
+        }
+
+        // ETFs (0050, 0056, 00878, 00923, 00403A, etc.) normal price 10..200
+        if (codeStr.startsWith('00')) {
+            if (c >= 1000) c = c / 100.0;
+            else if (c > 200) c = c / 10.0;
+            return parseFloat(c.toFixed(2));
+        }
+
+        // Standard TW stocks normal price 10..999
+        if (c >= 10000) {
+            c = c / 100.0;
+        } else if (c >= 1000 && c !== 1000.0) {
+            c = c / 100.0;
+        }
+
+        return parseFloat(c.toFixed(2));
+    }
+
     // Smart Taiwan Brokerage "商品" Column & Table OCR Parser (Multi-Layer Space-Tolerant)
     function parseOcrTextToHoldings(text) {
         if (!text || !text.trim()) {
@@ -596,6 +672,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 cost = numbers[1];
             }
 
+            // Smart Auto-Decimal Correction (e.g. 3843 -> 38.43, 7512 -> 75.12, 35534 -> 355.34)
+            cost = fixTaiwanStockCost(foundCode, cost);
+
             extracted.push({
                 code: foundCode,
                 name: stockCodeToName[foundCode] || foundName,
@@ -635,6 +714,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 5. Run Full Diagnosis
     btnDiagnose.addEventListener('click', async () => {
+        syncHoldingsFromTable();
         const validHoldings = currentHoldings.filter(h => h.code && h.code.trim() !== '');
 
         if (validHoldings.length === 0) {

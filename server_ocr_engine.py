@@ -34,7 +34,7 @@ ALIASES = {
     "群益低碳50": "00923", "ESG低碳50": "00923", "ESG低碳5O": "00923", "ESG低碳SO": "00923",
     "低碳50": "00923", "低碳5O": "00923", "低碳SO": "00923", "台ESG低碳50": "00923", "台ESG低碳": "00923", "群益低碳": "00923",
     "南亞": "1303", "南亚": "1303",
-    "大魯閣": "1432", "大鲁閣": "1432", "大鲁阁": "1432", "大魯阁": "1432", "大密阁": "1432", "大密閣": "1432", "大魯": "1432", "大鲁": "1432", "魯閣": "1432", "鲁阁": "1432", "大閣": "1432", "大阁": "1432",
+    "大魯閣": "1432", "大鲁閣": "1432", "大鲁阁": "1432", "大魯阁": "1432", "大密阁": "1432", "大密閣": "1432", "大魯": "1432", "大鲁": "1432", "魯閣": "1432", "鲁阁": "1432", "大閣": "1432", "大阁": "1432", "玩股": "1432", "玩": "1432",
     "台積電": "2330", "台积電": "2330", "台積电": "2330", "台积电": "2330", "台電": "2330", "台电": "2330", "台積": "2330", "台积": "2330", "台积毛": "2330",
     "南亞科": "2408", "南亚科": "2408", "南亚亞科": "2408", "南亞科技": "2408", "南亚科技": "2408",
     "力積電": "6770", "力精電": "6770", "力精电": "6770", "力桔電": "6770", "力積电": "6770", "力积電": "6770", "力积电": "6770", "力電": "6770", "力电": "6770", "力積": "6770", "力积": "6770", "力精": "6770",
@@ -54,6 +54,23 @@ def get_ocr_engine():
         except Exception as e:
             print(f"Failed to initialize RapidOCR: {e}")
     return engine
+
+def fix_tw_stock_cost(code, raw_cost):
+    c = float(raw_cost) if raw_cost else 0
+    if c <= 0: return 100.0
+    code = str(code).strip()
+    if code in ['2330', '2454', '3008', '6669', '3661', '5274', '3529', '2382']:
+        if c > 10000: c = c / 100.0
+        return round(c, 2)
+    if code.startswith('00'):
+        if c >= 1000: c = c / 100.0
+        elif c > 200: c = c / 10.0
+        return round(c, 2)
+    if c >= 10000:
+        c = c / 100.0
+    elif c >= 1000 and c != 1000.0:
+        c = c / 100.0
+    return round(c, 2)
 
 def process_brokerage_image(image_bytes_or_path):
     """Accurately parse Taiwan brokerage stock table screenshot"""
@@ -235,7 +252,9 @@ def process_brokerage_image(image_bytes_or_path):
                     if 1 < cand < 5000 and cand != shares:
                         cost = cand
                         break
-            
+
+        cost = fix_tw_stock_cost(found_code, cost)
+
         holdings.append({
             "code": found_code,
             "name": found_name,
@@ -244,6 +263,12 @@ def process_brokerage_image(image_bytes_or_path):
         })
         
     return holdings
+
+def extract_holdings_from_image(image_bytes_or_path):
+    holdings = process_brokerage_image(image_bytes_or_path)
+    return holdings, ""
+
+
 
 if __name__ == "__main__":
     if hasattr(sys.stdout, 'reconfigure'): sys.stdout.reconfigure(encoding='utf-8')
