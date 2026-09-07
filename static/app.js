@@ -580,20 +580,31 @@ document.addEventListener('DOMContentLoaded', () => {
             let shares = 1000;
             let cost = 0.0;
 
-            if (numbers.length >= 2) {
-                shares = (numbers.length > 1 && numbers[0] === numbers[1]) ? parseInt(numbers[1]) : parseInt(numbers[0]);
-                if (numbers.length >= 6) {
-                    const costCand = numbers[5];
-                    if (costCand > 0 && costCand < 100000) cost = costCand;
-                    else if (numbers[4] > 0 && numbers[4] < 100000) cost = numbers[4];
-                } else {
-                    for (let i = 1; i < numbers.length; i++) {
-                        if (numbers[i] > 0 && numbers[i] < 10000 && numbers[i] !== shares) {
-                            cost = numbers[i];
-                            break;
-                        }
+            if (numbers.length >= 4) {
+                // In Taiwan brokerage tables:
+                // numbers[0]: 庫存股數 (e.g. 2040)
+                // numbers[3] or numbers[4]: 平均成本 (e.g. 1052.42)
+                // numbers[5]: 即時市價 (e.g. 2440.00)
+                if (numbers.length >= 8 && numbers[7] > 10000 && shares > 0) {
+                    // Cross-check with 付出成本 / 股數 if available
+                    const totalCostCand = numbers[7] > numbers[6] ? numbers[7] : numbers[6];
+                    const derivedCost = totalCostCand / shares;
+                    if (derivedCost > 0 && derivedCost < 10000) {
+                        cost = derivedCost;
                     }
                 }
+                if (cost <= 0) {
+                    if (numbers.length >= 5 && numbers[4] > 0 && numbers[4] < 100000) {
+                        cost = numbers[4];
+                    } else if (numbers[3] > 0 && numbers[3] < 100000) {
+                        cost = numbers[3];
+                    } else if (numbers[2] > 0 && numbers[2] < 100000) {
+                        cost = numbers[2];
+                    }
+                }
+            } else if (numbers.length >= 2) {
+                shares = parseInt(numbers[0]) || 1000;
+                cost = numbers[1] || 100.0;
             } else if (numbers.length === 1) {
                 if (numbers[0] >= 100) shares = parseInt(numbers[0]);
                 else cost = numbers[0];
