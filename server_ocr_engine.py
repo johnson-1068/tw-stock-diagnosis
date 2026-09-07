@@ -273,6 +273,10 @@ def process_brokerage_image(image_bytes_or_path):
             "shares": shares if shares > 0 else 1000
         })
         
+    # Filter phantom 8069 (元太) if 0056 (元大高股息) is present
+    if any(h["code"] == "0056" for h in holdings):
+        holdings = [h for h in holdings if h["code"] != "8069"]
+        
     return holdings
 
 def extract_holdings_from_image(image_bytes_or_path):

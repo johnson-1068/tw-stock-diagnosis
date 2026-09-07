@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
         "主動統一升級50": "00403A", "主動统一升级50": "00403A", "主動統一升級": "00403A", "主動统一升级": "00403A",
         "主勃统一升级50": "00403A", "主勃統一升級50": "00403A", "主勃统一升级": "00403A", "主勃": "00403A", "主勤统一升级50": "00403A", "主勤": "00403A",
         "統一升級50": "00403A", "统一升级50": "00403A", "統一升級": "00403A", "统一升级": "00403A", "主動統一": "00403A",
-        "元大高股息": "0056", "高股息": "0056", "大高股息": "0056", "元大高息": "0056", "元大高股": "0056", "大高息": "0056",
+        "元大高股息": "0056", "元太高股息": "0056", "高股息": "0056", "大高股息": "0056", "元大高息": "0056", "元太高息": "0056", "元大高股": "0056", "元太高股": "0056", "大高息": "0056",
         "群益台ESG低碳50": "00923", "群益台esg低碳50": "00923", "群益台ESG低碳5O": "00923", "群益台ESG低碳SO": "00923",
         "群益低碳50": "00923", "ESG低碳50": "00923", "ESG低碳5O": "00923", "ESG低碳SO": "00923",
         "低碳50": "00923", "低碳5O": "00923", "低碳SO": "00923", "台ESG低碳50": "00923", "台ESG低碳": "00923", "群益低碳": "00923",
@@ -631,6 +631,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         continue;
                     }
                 }
+                // SPECIAL SUBSTRING COLLISION CHECK: If name is '元太' or '元大' and followed by ETF keywords, it's 0056 / 0050, not 8069 元太!
+                if (name === '元太' || name === '元大') {
+                    const after = text.substring(m.index + matchLen, m.index + matchLen + 8).replace(/\s+/g, '');
+                    if (after.startsWith('高股息') || after.startsWith('高息') || after.startsWith('高股') || after.startsWith('股息') || after.startsWith('台灣50') || after.startsWith('50')) {
+                        continue;
+                    }
+                }
                 matches.push({ pos: m.index, end: m.index + matchLen, name: name, code: stockNameToCode[name], len: matchLen });
             }
         });
@@ -649,7 +656,7 @@ document.addEventListener('DOMContentLoaded', () => {
         matches.sort((a, b) => a.pos === b.pos ? (b.len - a.len) : (a.pos - b.pos));
 
         // Filter overlapping matches
-        const cleanMatches = [];
+        let cleanMatches = [];
         let lastEnd = -1;
         matches.forEach(m => {
             if (m.pos >= lastEnd && !cleanMatches.some(x => x.code === m.code)) {
@@ -657,6 +664,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 lastEnd = m.pos + m.len;
             }
         });
+
+        // Filter out phantom 8069 (元太) if 0056 (元大高股息) or 0050 is present nearby
+        if (cleanMatches.some(m => m.code === '0056' || m.code === '0050')) {
+            cleanMatches = cleanMatches.filter(m => m.code !== '8069');
+        }
 
         // 2. Process each stock's text chunk (spanning all lines until next stock)
         cleanMatches.forEach((m, idx) => {
