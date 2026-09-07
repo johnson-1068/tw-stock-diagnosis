@@ -68,6 +68,10 @@ def process_brokerage_image(image_bytes_or_path):
     else:
         im = image_bytes_or_path.convert('RGB')
         
+    if im.width > 1800:
+        ratio = 1800.0 / im.width
+        im = im.resize((1800, int(im.height * ratio)), Image.Resampling.BILINEAR)
+        
     width, height = im.size
     
     # 1. Full Image OCR
