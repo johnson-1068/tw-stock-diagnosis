@@ -91,6 +91,17 @@ if not STOCK_CODE_TO_NAME:
     STOCK_NAME_TO_CODE.update({v: k for k, v in ESSENTIAL_STOCKS.items()})
     logger.info(f"Loaded {len(STOCK_CODE_TO_NAME)} essential stocks into fallback database")
 
+# Background RapidOCR Warmup Thread
+def _warmup_ocr():
+    try:
+        from server_ocr_engine import get_ocr_engine
+        get_ocr_engine()
+        logger.info("RapidOCR AI Visual Engine initialized & warmed up successfully.")
+    except Exception as e:
+        logger.warning(f"RapidOCR warmup notice: {e}")
+
+threading.Thread(target=_warmup_ocr, daemon=True).start()
+
 def get_tw_symbol(code: str) -> list:
     """Return possible yfinance symbols for Taiwan stock"""
     code = str(code).strip()
