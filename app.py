@@ -478,26 +478,42 @@ def parse_table_api():
             except ValueError:
                 pass
                 
+        # 1. Determine shares: look for two adjacent identical numbers (庫存可用 == 即時庫存) or valid integer token
         shares = 1000
+        for i in range(len(numbers) - 1):
+            if numbers[i] == numbers[i + 1] and 1 <= numbers[i] <= 10000000:
+                shares = int(numbers[i])
+                break
+        if shares == 1000 and len(numbers) >= 1:
+            int_cands = [int(float(t)) for t in tokens if '.' not in t and 1 <= float(t) <= 1000000]
+            if int_cands:
+                shares = int_cands[0]
+
+        # 2. Determine cost: use Total Cost / Shares invariant first
         cost = 0.0
-        
-        if len(numbers) >= 2:
-            shares = int(numbers[1]) if len(numbers) > 1 and numbers[0] == numbers[1] else int(numbers[0])
-            if len(numbers) >= 6:
-                cost_candidate = numbers[5]
-                if 0 < cost_candidate < 100000:
-                    cost = cost_candidate
-                elif 0 < numbers[4] < 100000:
-                    cost = numbers[4]
-            else:
-                for n in numbers[1:]:
-                    if 0 < n < 10000 and n != shares:
-                        cost = n
-                        break
-        elif len(numbers) == 1:
-            if numbers[0] >= 100: shares = int(numbers[0])
-            else: cost = numbers[0]
-            
+        for n in numbers:
+            if n >= 10 and shares > 0:
+                unit = n / shares
+                if found_code.startswith("00") and 8.0 <= unit <= 250.0:
+                    cost = round(unit, 2)
+                elif found_code in ["2330", "2454", "3008", "6669", "3661", "5274", "3529", "2382"] and 300.0 <= unit <= 4000.0:
+                    cost = round(unit, 2)
+                elif not found_code.startswith("00") and 8.0 <= unit <= 2000.0:
+                    cost = round(unit, 2)
+
+        # 3. Fallback to decimal candidates
+        if cost == 0.0:
+            dec_cands = [float(t) for t in tokens if '.' in t and 1.0 <= float(t) <= 3500.0]
+            if len(dec_cands) >= 2:
+                cost = dec_cands[1]
+            elif len(dec_cands) == 1:
+                cost = dec_cands[0]
+            elif len(numbers) >= 2:
+                cost = numbers[1]
+
+        from server_ocr_engine import fix_tw_stock_cost
+        cost = fix_tw_stock_cost(found_code, cost)
+
         extracted.append({
             "code": found_code,
             "name": STOCK_CODE_TO_NAME.get(found_code, found_name),

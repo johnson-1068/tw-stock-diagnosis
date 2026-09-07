@@ -653,26 +653,49 @@ document.addEventListener('DOMContentLoaded', () => {
             const tokens = lineClean.match(/[-+]?\d*\.?\d+/g) || [];
             const numbers = tokens.map(t => parseFloat(t)).filter(n => !isNaN(n));
 
-            // 1. Determine shares from integer tokens (excluding headers)
-            const intCands = tokens.filter(t => !t.includes('.') && parseInt(t) >= 1).map(t => parseInt(t));
+            // 1. Determine shares: look for two adjacent identical numbers (庫存可用 == 即時庫存) or valid integer token
             let shares = 1000;
-            if (intCands.length > 0) {
-                shares = intCands[0];
+            for (let i = 0; i < numbers.length - 1; i++) {
+                if (numbers[i] === numbers[i + 1] && numbers[i] >= 1 && numbers[i] <= 10000000) {
+                    shares = Math.round(numbers[i]);
+                    break;
+                }
+            }
+            if (shares === 1000) {
+                const intCands = tokens.filter(t => !t.includes('.') && parseInt(t) >= 1 && parseInt(t) <= 1000000).map(t => parseInt(t));
+                if (intCands.length > 0) {
+                    shares = intCands[0];
+                }
             }
 
-            // 2. Determine average cost from decimal tokens (between 1.0 and 3500.0)
-            const decCands = tokens.filter(t => t.includes('.') && parseFloat(t) >= 1.0 && parseFloat(t) <= 3500.0).map(t => parseFloat(t));
-            let cost = 100.0;
-            if (decCands.length >= 2) {
-                // In Taiwan brokerage rows: [均價, 平均成本, 市價, 漲跌, 報酬率] -> decCands[1] is 平均成本
-                cost = decCands[1];
-            } else if (decCands.length === 1) {
-                cost = decCands[0];
-            } else if (numbers.length >= 2) {
-                cost = numbers[1];
+            // 2. Determine cost: use Total Cost / Shares invariant first
+            let cost = 0.0;
+            for (let n of numbers) {
+                if (n >= 10 && shares > 0) {
+                    let unit = n / shares;
+                    if (foundCode.startsWith('00') && unit >= 8.0 && unit <= 250.0) {
+                        cost = parseFloat(unit.toFixed(2));
+                    } else if (['2330', '2454', '3008', '6669', '3661', '5274', '3529', '2382'].includes(foundCode) && unit >= 300.0 && unit <= 4000.0) {
+                        cost = parseFloat(unit.toFixed(2));
+                    } else if (!foundCode.startsWith('00') && unit >= 8.0 && unit <= 2000.0) {
+                        cost = parseFloat(unit.toFixed(2));
+                    }
+                }
             }
 
-            // Smart Auto-Decimal Correction (e.g. 3843 -> 38.43, 7512 -> 75.12, 35534 -> 355.34)
+            // 3. Fallback: if total cost invariant didn't trigger, look at decimal candidates
+            if (cost === 0.0) {
+                const decCands = tokens.filter(t => t.includes('.') && parseFloat(t) >= 1.0 && parseFloat(t) <= 3500.0).map(t => parseFloat(t));
+                if (decCands.length >= 2) {
+                    cost = decCands[1]; // 平均成本
+                } else if (decCands.length === 1) {
+                    cost = decCands[0];
+                } else if (numbers.length >= 2) {
+                    cost = numbers[1];
+                }
+            }
+
+            // 4. Smart Auto-Decimal Correction (e.g. 3843 -> 38.43, 7512 -> 75.12, 35534 -> 355.34)
             cost = fixTaiwanStockCost(foundCode, cost);
 
             extracted.push({
