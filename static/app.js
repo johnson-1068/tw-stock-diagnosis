@@ -655,19 +655,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ holdings: validHoldings })
             });
 
-            const data = await response.json();
+            let data = null;
+            try {
+                data = await response.json();
+            } catch (e) {}
+
             if (response.ok && data) {
                 lastDiagnosticData = data;
                 renderDiagnosticResults(data);
                 resultsPanel.style.display = 'block';
                 resultsPanel.scrollIntoView({ behavior: 'smooth' });
                 showNotification(`🎉 持股健檢分析完成！已為您產出 ${validHoldings.length} 檔多維度風控與盤口決策建議。`);
+            } else if (response.status === 502 || response.status === 503 || response.status === 504) {
+                alert('⏳ 雲端免費伺服器初次喚醒中（約需 15-30 秒），請稍候 10 秒後再按一次「啟動健檢」即可！');
             } else {
-                alert(data.error || '診斷過程發生錯誤');
+                alert(data?.error || '診斷伺服器回應異常，請稍後重試');
             }
         } catch (err) {
             console.error('Diagnosis Error:', err);
-            alert('連線失敗，請確認後端服務正常運行');
+            alert('⏳ 雲端伺服器正在喚醒或連線中，請稍候 10 秒後再按一次「啟動健檢」即可！');
         } finally {
             btnDiagnose.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> 啟動多維度買賣深度健檢';
             btnDiagnose.disabled = false;

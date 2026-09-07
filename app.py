@@ -501,82 +501,104 @@ def parse_table_api():
         
     return jsonify(extracted)
 
-@app.route("/api/diagnose", methods=["POST"])
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
+    return response
+
+@app.route("/api/diagnose", methods=["POST", "OPTIONS"])
 def run_diagnosis():
-    data = request.get_json() or {}
-    holdings = data.get("holdings", [])
-    
-    if not holdings:
-        return jsonify({"error": "請提供至少一檔持股資料"}), 400
+    if request.method == "OPTIONS":
+        return jsonify({}), 200
         
-    taiex = fetch_taiex_market()
-    results = []
-    
-    total_cost_all = 0.0
-    total_val_all = 0.0
-    
-    for item in holdings:
-        code = str(item.get("code", "")).strip()
-        name = str(item.get("name", "")).strip()
-        cost = float(item.get("cost", 0))
-        shares = int(item.get("shares", 1000))
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        holdings = data.get("holdings", [])
         
-        if not code:
-            continue
+        if not holdings:
+            return jsonify({"error": "請提供至少一檔持股資料"}), 400
             
-        diag = fetch_single_stock(code, name, cost, shares)
-        if not taiex["is_bull"] and diag["rating"] == "STRONG_HOLD":
-            diag["action_reason"] += " (註：大盤破月線，逢反彈宜適度收縮持股水位)"
-            
-        results.append(diag)
-        total_cost_all += diag["total_cost"]
-        total_val_all += diag["total_market_val"]
+        taiex = fetch_taiex_market()
+        valid_items = [item for item in holdings if str(item.get("code", "")).strip()]
         
-    total_pnl = total_val_all - total_cost_all
-    total_pnl_pct = (total_pnl / total_cost_all * 100) if total_cost_all > 0 else 0
-    
-    sorted_checklist = sorted(results, key=lambda x: (x["urgency_level"], -abs(x["pnl_pct"])))
-    
-    action_items = []
-    for s in sorted_checklist:
-        action_items.append({
-            "code": s["code"],
-            "name": s["name"],
-            "rating": s["rating"],
-            "rating_label": s["rating_label"],
-            "rating_color": s["rating_color"],
-            "urgency_level": s["urgency_level"],
-            "pnl_pct": s["pnl_pct"],
-            "action_text": s["action_reason"],
-            "key_price": s["hard_stop_loss"] if s["rating"] == "STOP_LOSS" else (s["target_1"] if s["rating"] == "TAKE_PROFIT" else s["breakeven_price"])
+        # Parallel fetch for instant sub-second response across all stocks
+        results = []
+        with ThreadPoolExecutor(max_workers=min(8, max(1, len(valid_items)))) as executor:
+            future_to_idx = {
+                executor.submit(
+                    fetch_single_stock,
+                    str(item.get("code", "")).strip(),
+                    str(item.get("name", "")).strip(),
+                    float(item.get("cost", 0)),
+                    int(item.get("shares", 1000))
+                ): idx for idx, item in enumerate(valid_items)
+            }
+            ordered_results = [None] * len(valid_items)
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                try:
+                    res = future.result()
+                    if not taiex["is_bull"] and res.get("rating") == "STRONG_HOLD":
+                        res["action_reason"] += " (註：大盤破月線，逢反彈宜適度收縮持股水位)"
+                    ordered_results[idx] = res
+                except Exception as e:
+                    logger.warning(f"Error fetching stock at index {idx}: {e}")
+            results = [r for r in ordered_results if r is not None]
+            
+        total_cost_all = sum(diag["total_cost"] for diag in results)
+        total_val_all = sum(diag["total_market_val"] for diag in results)
+        total_pnl = total_val_all - total_cost_all
+        total_pnl_pct = (total_pnl / total_cost_all * 100) if total_cost_all > 0 else 0
+        
+        sorted_checklist = sorted(results, key=lambda x: (x["urgency_level"], -abs(x["pnl_pct"])))
+        
+        action_items = []
+        for s in sorted_checklist:
+            action_items.append({
+                "code": s["code"],
+                "name": s["name"],
+                "rating": s["rating"],
+                "rating_label": s["rating_label"],
+                "rating_color": s["rating_color"],
+                "urgency_level": s["urgency_level"],
+                "pnl_pct": s["pnl_pct"],
+                "action_text": s["action_reason"],
+                "key_price": s["hard_stop_loss"] if s["rating"] == "STOP_LOSS" else (s["target_1"] if s["rating"] == "TAKE_PROFIT" else s["breakeven_price"])
+            })
+            
+        win_count = sum(1 for s in results if s["pnl_pct"] > 0)
+        ma20_pass_count = sum(1 for s in results if s["current_price"] >= s["ma20"])
+        
+        health_score = 60
+        if len(results) > 0:
+            win_rate = win_count / len(results)
+            ma20_rate = ma20_pass_count / len(results)
+            health_score = int(30 + (win_rate * 35) + (ma20_rate * 35))
+            if total_pnl_pct > 5: health_score = min(100, health_score + 10)
+            elif total_pnl_pct < -5: health_score = max(20, health_score - 15)
+            
+        return jsonify({
+            "taiex": taiex,
+            "portfolio_summary": {
+                "total_count": len(results),
+                "total_cost": round(total_cost_all, 0),
+                "total_market_val": round(total_val_all, 0),
+                "total_pnl": round(total_pnl, 0),
+                "total_pnl_pct": round(total_pnl_pct, 2),
+                "health_score": health_score,
+                "win_count": win_count,
+                "loss_count": len(results) - win_count
+            },
+            "diagnostics": results,
+            "action_checklist": action_items
         })
-        
-    win_count = sum(1 for s in results if s["pnl_pct"] > 0)
-    ma20_pass_count = sum(1 for s in results if s["current_price"] >= s["ma20"])
-    
-    health_score = 60
-    if len(results) > 0:
-        win_rate = win_count / len(results)
-        ma20_rate = ma20_pass_count / len(results)
-        health_score = int(30 + (win_rate * 35) + (ma20_rate * 35))
-        if total_pnl_pct > 5: health_score = min(100, health_score + 10)
-        elif total_pnl_pct < -5: health_score = max(20, health_score - 15)
-        
-    return jsonify({
-        "taiex": taiex,
-        "portfolio_summary": {
-            "total_count": len(results),
-            "total_cost": round(total_cost_all, 0),
-            "total_market_val": round(total_val_all, 0),
-            "total_pnl": round(total_pnl, 0),
-            "total_pnl_pct": round(total_pnl_pct, 2),
-            "health_score": health_score,
-            "win_count": win_count,
-            "loss_count": len(results) - win_count
-        },
-        "diagnostics": results,
-        "action_checklist": action_items
-    })
+    except Exception as e:
+        logger.error(f"Diagnosis endpoint error: {e}", exc_info=True)
+        return jsonify({"error": f"診斷伺服器忙碌中，請稍後重試 ({str(e)})"}), 500
 
 @app.route("/api/upload-screenshot", methods=["POST"])
 def upload_screenshot():
@@ -610,7 +632,7 @@ def upload_screenshot():
         return jsonify({"success": False, "error": "未收到圖片檔案"}), 400
     except Exception as e:
         logger.error(f"Upload OCR error: {e}", exc_info=True)
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e), "holdings": []}), 200
 
 @app.route("/api/presets", methods=["GET"])
 def get_presets():
