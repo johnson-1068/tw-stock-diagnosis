@@ -577,37 +577,23 @@ document.addEventListener('DOMContentLoaded', () => {
             const tokens = lineClean.match(/[-+]?\d*\.?\d+/g) || [];
             const numbers = tokens.map(t => parseFloat(t)).filter(n => !isNaN(n));
 
+            // 1. Determine shares from integer tokens (excluding headers)
+            const intCands = tokens.filter(t => !t.includes('.') && parseInt(t) >= 1).map(t => parseInt(t));
             let shares = 1000;
-            let cost = 0.0;
+            if (intCands.length > 0) {
+                shares = intCands[0];
+            }
 
-            if (numbers.length >= 4) {
-                // In Taiwan brokerage tables:
-                // numbers[0]: 庫存股數 (e.g. 2040)
-                // numbers[3] or numbers[4]: 平均成本 (e.g. 1052.42)
-                // numbers[5]: 即時市價 (e.g. 2440.00)
-                if (numbers.length >= 8 && numbers[7] > 10000 && shares > 0) {
-                    // Cross-check with 付出成本 / 股數 if available
-                    const totalCostCand = numbers[7] > numbers[6] ? numbers[7] : numbers[6];
-                    const derivedCost = totalCostCand / shares;
-                    if (derivedCost > 0 && derivedCost < 10000) {
-                        cost = derivedCost;
-                    }
-                }
-                if (cost <= 0) {
-                    if (numbers.length >= 5 && numbers[4] > 0 && numbers[4] < 100000) {
-                        cost = numbers[4];
-                    } else if (numbers[3] > 0 && numbers[3] < 100000) {
-                        cost = numbers[3];
-                    } else if (numbers[2] > 0 && numbers[2] < 100000) {
-                        cost = numbers[2];
-                    }
-                }
+            // 2. Determine average cost from decimal tokens (between 1.0 and 3500.0)
+            const decCands = tokens.filter(t => t.includes('.') && parseFloat(t) >= 1.0 && parseFloat(t) <= 3500.0).map(t => parseFloat(t));
+            let cost = 100.0;
+            if (decCands.length >= 2) {
+                // In Taiwan brokerage rows: [均價, 平均成本, 市價, 漲跌, 報酬率] -> decCands[1] is 平均成本
+                cost = decCands[1];
+            } else if (decCands.length === 1) {
+                cost = decCands[0];
             } else if (numbers.length >= 2) {
-                shares = parseInt(numbers[0]) || 1000;
-                cost = numbers[1] || 100.0;
-            } else if (numbers.length === 1) {
-                if (numbers[0] >= 100) shares = parseInt(numbers[0]);
-                else cost = numbers[0];
+                cost = numbers[1];
             }
 
             extracted.push({
