@@ -43,10 +43,24 @@ ALIASES = {
 }
 name_to_code.update(ALIASES)
 
-engine = RapidOCR()
+engine = None
+
+def get_ocr_engine():
+    global engine
+    if engine is None:
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+            engine = RapidOCR()
+        except Exception as e:
+            print(f"Failed to initialize RapidOCR: {e}")
+    return engine
 
 def process_brokerage_image(image_bytes_or_path):
     """Accurately parse Taiwan brokerage stock table screenshot"""
+    ocr = get_ocr_engine()
+    if ocr is None:
+        return []
+
     if isinstance(image_bytes_or_path, (bytes, bytearray)):
         im = Image.open(io.BytesIO(image_bytes_or_path)).convert('RGB')
     elif isinstance(image_bytes_or_path, str):
@@ -57,7 +71,7 @@ def process_brokerage_image(image_bytes_or_path):
     width, height = im.size
     
     # 1. Full Image OCR
-    full_res, _ = engine(np.array(im))
+    full_res, _ = ocr(np.array(im))
     if not full_res:
         return []
         

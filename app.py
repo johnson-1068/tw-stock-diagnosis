@@ -230,8 +230,14 @@ def fetch_single_stock(code: str, name: str = "", cost: float = 0.0, shares: int
     
     total_cost = cost * shares
     total_market_val = current_price * shares
-    unrealized_pnl = total_market_val - total_cost
-    pnl_pct = ((current_price - cost) / cost) * 100 if cost > 0 else 0
+    
+    # Taiwan Stock/ETF Transaction Tax (ETF: 0.1%, Stock: 0.3%) & Electronic Broker Fee (~0.071%)
+    is_etf = str(code).startswith("00")
+    tax_rate = 0.001 if is_etf else 0.003
+    est_tax = round(total_market_val * tax_rate)
+    est_fee = round(total_market_val * 0.001425 * 0.5)
+    unrealized_pnl = total_market_val - total_cost - est_tax - est_fee
+    pnl_pct = (unrealized_pnl / total_cost * 100) if total_cost > 0 else 0
     
     dist_ma20_pct = ((current_price - ma20) / ma20) * 100
     dist_ma60_pct = ((current_price - ma60) / ma60) * 100
@@ -551,8 +557,8 @@ def run_diagnosis():
             
         total_cost_all = sum(diag["total_cost"] for diag in results)
         total_val_all = sum(diag["total_market_val"] for diag in results)
-        total_pnl = total_val_all - total_cost_all
-        total_pnl_pct = (total_pnl / total_cost_all * 100) if total_cost_all > 0 else 0
+        total_net_pnl = sum(diag["unrealized_pnl"] for diag in results)
+        total_pnl_pct = (total_net_pnl / total_cost_all * 100) if total_cost_all > 0 else 0
         
         sorted_checklist = sorted(results, key=lambda x: (x["urgency_level"], -abs(x["pnl_pct"])))
         
@@ -587,7 +593,7 @@ def run_diagnosis():
                 "total_count": len(results),
                 "total_cost": round(total_cost_all, 0),
                 "total_market_val": round(total_val_all, 0),
-                "total_pnl": round(total_pnl, 0),
+                "total_pnl": round(total_net_pnl, 0),
                 "total_pnl_pct": round(total_pnl_pct, 2),
                 "health_score": health_score,
                 "win_count": win_count,
