@@ -247,11 +247,22 @@ def process_brokerage_image(image_bytes_or_path):
                     pass
             if shares == 1000 and len(num_tokens) >= 1:
                 shares = int(num_tokens[0]) if num_tokens[0] >= 1 else 1000
-            if cost == 0.0:
-                for cand in num_tokens:
-                    if 1 < cand < 5000 and cand != shares:
-                        cost = cand
-                        break
+        total_cost = 0.0
+        total_cost_boxes = [b for b in r["boxes"] if 0.55 <= b["x_norm"] <= 0.65]
+        for tcb in total_cost_boxes:
+            c_val = tcb["text"].replace(',', '').replace(' ', '')
+            try:
+                v = float(c_val)
+                if v > 0:
+                    total_cost = v
+                    break
+            except ValueError:
+                pass
+
+        if (shares == 1000 or shares == int(cost)) and total_cost > 0 and cost > 0:
+            calc_shares = round(total_cost / cost)
+            if 1 <= calc_shares <= 10000000:
+                shares = calc_shares
 
         cost = fix_tw_stock_cost(found_code, cost)
 
