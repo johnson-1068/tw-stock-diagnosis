@@ -614,7 +614,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const regex = new RegExp(escaped, 'gi');
             let m;
             while ((m = regex.exec(text)) !== null) {
-                matches.push({ pos: m.index, name: name, code: stockNameToCode[name] });
+                // SPECIAL SUBSTRING COLLISION CHECK: If name is '南亞' and next char is '科', it's 南亞科 (2408), not 南亞 (1303)!
+                if ((name === '南亞' || name === '南亚') && text.substring(m.index + name.length, m.index + name.length + 1) === '科') {
+                    continue;
+                }
+                matches.push({ pos: m.index, name: name, code: stockNameToCode[name], len: name.length });
             }
         });
 
@@ -624,11 +628,12 @@ document.addEventListener('DOMContentLoaded', () => {
         while ((cm = codeRegex.exec(text)) !== null) {
             const code = cm[1];
             if (stockCodeToName[code] && !matches.some(m => Math.abs(m.pos - cm.index) < 10)) {
-                matches.push({ pos: cm.index, name: stockCodeToName[code], code: code });
+                matches.push({ pos: cm.index, name: stockCodeToName[code], code: code, len: code.length });
             }
         }
 
-        matches.sort((a, b) => a.pos - b.pos);
+        // Sort primarily by position ASC, and secondarily by length DESC (longer name wins on collision)
+        matches.sort((a, b) => a.pos === b.pos ? (b.len - a.len) : (a.pos - b.pos));
 
         // Filter overlapping matches
         const cleanMatches = [];
@@ -636,7 +641,7 @@ document.addEventListener('DOMContentLoaded', () => {
         matches.forEach(m => {
             if (m.pos >= lastEnd && !cleanMatches.some(x => x.code === m.code)) {
                 cleanMatches.push(m);
-                lastEnd = m.pos + m.name.length;
+                lastEnd = m.pos + m.len;
             }
         });
 
@@ -1083,9 +1088,9 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => toast.remove(), 3500);
     }
 
-    // Initialize Database and Market
+    // Initialize Database and Market (Clean slate ready for screenshot upload)
     loadStockDatabase().then(() => {
-        loadPreset('yuanta_ai');
+        renderHoldingsTable();
     });
     initMarket();
 });
