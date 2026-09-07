@@ -607,18 +607,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const extracted = [];
         const sortedNames = Object.keys(stockNameToCode).sort((a, b) => b.length - a.length);
 
-        // 1. Find all stock names and their positions in full text
+        // 1. Find all stock names and their positions in full text (Space-Tolerant)
         const matches = [];
         sortedNames.forEach(name => {
-            const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const regex = new RegExp(escaped, 'gi');
+            const chars = name.split('').map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+            const pattern = chars.join('\\s*');
+            const regex = new RegExp(pattern, 'gi');
             let m;
             while ((m = regex.exec(text)) !== null) {
+                const matchLen = m[0].length;
                 // SPECIAL SUBSTRING COLLISION CHECK: If name is '南亞' and next char is '科', it's 南亞科 (2408), not 南亞 (1303)!
-                if ((name === '南亞' || name === '南亚') && text.substring(m.index + name.length, m.index + name.length + 1) === '科') {
-                    continue;
+                if (name === '南亞' || name === '南亚') {
+                    const after = text.substring(m.index + matchLen, m.index + matchLen + 4).replace(/\s+/g, '');
+                    if (after.startsWith('科')) {
+                        continue;
+                    }
                 }
-                matches.push({ pos: m.index, name: name, code: stockNameToCode[name], len: name.length });
+                matches.push({ pos: m.index, end: m.index + matchLen, name: name, code: stockNameToCode[name], len: matchLen });
             }
         });
 
