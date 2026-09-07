@@ -500,10 +500,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let serverParsed = false;
             try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 4000);
+
                 const res = await fetch('/api/upload-screenshot', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    signal: controller.signal
                 });
+                clearTimeout(timeoutId);
+
                 if (res.ok) {
                     const data = await res.json();
                     if (data.success && data.holdings && data.holdings.length > 0) {
@@ -524,7 +530,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             } catch (srvErr) {
-                console.warn('Server OCR failed, falling back to browser OCR:', srvErr);
+                console.warn('Server OCR timed out or failed, falling back to instant browser OCR:', srvErr);
             }
 
             if (!serverParsed) {
@@ -599,58 +605,50 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const extracted = [];
-        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-        
-        // Sort known stock names by length descending
         const sortedNames = Object.keys(stockNameToCode).sort((a, b) => b.length - a.length);
 
-        // LAYER 1: Line-by-Line Space-Tolerant Matching
-        lines.forEach(line => {
-            if (/即時庫存損益|整戶維持率|筆數|註：|付出成本|損益兩平點/.test(line)) {
-                return;
+        // 1. Find all stock names and their positions in full text
+        const matches = [];
+        sortedNames.forEach(name => {
+            const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(escaped, 'gi');
+            let m;
+            while ((m = regex.exec(text)) !== null) {
+                matches.push({ pos: m.index, name: name, code: stockNameToCode[name] });
             }
+        });
 
-            const lineNoSpace = line.replace(/[\s\-_,.:;]+/g, '');
-            let foundName = null;
-            let foundCode = null;
-            let matchStr = '';
-
-            // 1. Check Chinese stock names (space-tolerant)
-            for (let name of sortedNames) {
-                const nameNoSpace = name.replace(/[\s\-_,.:;]+/g, '');
-                if (nameNoSpace.length >= 2 && lineNoSpace.includes(nameNoSpace)) {
-                    foundName = name;
-                    foundCode = stockNameToCode[name];
-                    matchStr = name;
-                    break;
-                }
+        // Also search for 4-6 digit stock codes
+        const codeRegex = /\b([0-9]{4,6}[A-Z]?)\b/g;
+        let cm;
+        while ((cm = codeRegex.exec(text)) !== null) {
+            const code = cm[1];
+            if (stockCodeToName[code] && !matches.some(m => Math.abs(m.pos - cm.index) < 10)) {
+                matches.push({ pos: cm.index, name: stockCodeToName[code], code: code });
             }
+        }
 
-            // 2. Check 4-digit code pattern
-            if (!foundName) {
-                const codeMatch = line.match(/\b([0-9]{4,6}[A-Z]?)\b/);
-                if (codeMatch && stockCodeToName[codeMatch[1]]) {
-                    foundCode = codeMatch[1];
-                    foundName = stockCodeToName[foundCode];
-                    matchStr = codeMatch[1];
-                }
+        matches.sort((a, b) => a.pos - b.pos);
+
+        // Filter overlapping matches
+        const cleanMatches = [];
+        let lastEnd = -1;
+        matches.forEach(m => {
+            if (m.pos >= lastEnd && !cleanMatches.some(x => x.code === m.code)) {
+                cleanMatches.push(m);
+                lastEnd = m.pos + m.name.length;
             }
+        });
 
-            if (!foundName || !foundCode) return;
-            if (extracted.some(item => item.code === foundCode)) return;
+        // 2. Process each stock's text chunk (spanning all lines until next stock)
+        cleanMatches.forEach((m, idx) => {
+            const startIdx = m.pos;
+            const endIdx = idx + 1 < cleanMatches.length ? cleanMatches[idx + 1].pos : Math.min(text.length, startIdx + 300);
+            const chunk = text.substring(startIdx, endIdx);
 
-            // Strip the stock name (with optional spaces between chars) & header keywords
-            let lineClean = line;
-            if (matchStr) {
-                const escapedChars = matchStr.split('').map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-                const charRegex = new RegExp(escapedChars.join('\\s*'), 'gi');
-                lineClean = lineClean.replace(charRegex, ' ');
-            }
-            lineClean = lineClean.replace(/明\s*細|現\s*股|融\s*資|融\s*券|商\s*品|種\s*類/gi, ' ');
-
-            // Remove commas in numbers e.g. 5,000 -> 5000, 1,052.42 -> 1052.42
-            lineClean = lineClean.replace(/(\d),(\d)/g, '$1$2');
-            const tokens = lineClean.match(/[-+]?\d*\.?\d+/g) || [];
+            let chunkClean = chunk.replace(/(\d),(\d)/g, '$1$2');
+            chunkClean = chunkClean.replace(/明\s*細|現\s*股|融\s*資|融\s*券|商\s*品|種\s*類/gi, ' ');
+            const tokens = chunkClean.match(/[-+]?\d*\.?\d+/g) || [];
             const numbers = tokens.map(t => parseFloat(t)).filter(n => !isNaN(n));
 
             // 1. Determine shares: look for two adjacent identical numbers (庫存可用 == 即時庫存) or valid integer token
@@ -673,11 +671,11 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let n of numbers) {
                 if (n >= 10 && shares > 0) {
                     let unit = n / shares;
-                    if (foundCode.startsWith('00') && unit >= 8.0 && unit <= 250.0) {
+                    if (m.code.startsWith('00') && unit >= 8.0 && unit <= 250.0) {
                         cost = parseFloat(unit.toFixed(2));
-                    } else if (['2330', '2454', '3008', '6669', '3661', '5274', '3529', '2382'].includes(foundCode) && unit >= 300.0 && unit <= 4000.0) {
+                    } else if (['2330', '2454', '3008', '6669', '3661', '5274', '3529', '2382'].includes(m.code) && unit >= 300.0 && unit <= 4000.0) {
                         cost = parseFloat(unit.toFixed(2));
-                    } else if (!foundCode.startsWith('00') && unit >= 8.0 && unit <= 2000.0) {
+                    } else if (!m.code.startsWith('00') && unit >= 8.0 && unit <= 2000.0) {
                         cost = parseFloat(unit.toFixed(2));
                     }
                 }
@@ -696,34 +694,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // 4. Smart Auto-Decimal Correction (e.g. 3843 -> 38.43, 7512 -> 75.12, 35534 -> 355.34)
-            cost = fixTaiwanStockCost(foundCode, cost);
+            cost = fixTaiwanStockCost(m.code, cost);
 
             extracted.push({
-                code: foundCode,
-                name: stockCodeToName[foundCode] || foundName,
+                code: m.code,
+                name: stockCodeToName[m.code] || m.name,
                 cost: cost > 0 ? parseFloat(cost.toFixed(2)) : 100.0,
                 shares: shares > 0 ? shares : 1000
             });
         });
-
-        // LAYER 2: Global Full-Text Scanning Fallback (If line-by-line missed items)
-        if (extracted.length === 0) {
-            const fullTextNoSpace = text.replace(/[\s\-_,.:;]+/g, '');
-            for (let name of sortedNames) {
-                const nameNoSpace = name.replace(/[\s\-_,.:;]+/g, '');
-                if (nameNoSpace.length >= 2 && fullTextNoSpace.includes(nameNoSpace)) {
-                    const code = stockNameToCode[name];
-                    if (!extracted.some(item => item.code === code)) {
-                        extracted.push({
-                            code: code,
-                            name: stockCodeToName[code] || name,
-                            cost: 100.0,
-                            shares: 1000
-                        });
-                    }
-                }
-            }
-        }
 
         if (extracted.length === 0) {
             return false;
