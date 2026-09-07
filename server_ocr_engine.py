@@ -201,12 +201,11 @@ def process_brokerage_image(image_bytes_or_path):
             except ValueError:
                 pass
                 
-        # Check normalized cost boxes (x_norm: 0.42 .. 0.48 or 0.38 .. 0.42)
-        cost_boxes = [b for b in r["boxes"] if 0.42 <= b["x_norm"] <= 0.48]
-        if not cost_boxes:
-            cost_boxes = [b for b in r["boxes"] if 0.38 <= b["x_norm"] <= 0.42]
+        # Check normalized cost boxes strictly around Average Cost column (center ~ 0.445, avoid market price >= 0.475)
+        candidate_boxes = [b for b in r["boxes"] if 0.38 <= b["x_norm"] <= 0.468]
+        candidate_boxes.sort(key=lambda b: abs(b["x_norm"] - 0.445))
             
-        for cb in cost_boxes:
+        for cb in candidate_boxes:
             c_val = cb["text"].replace(',', '').replace(' ', '')
             try:
                 v = float(c_val)
