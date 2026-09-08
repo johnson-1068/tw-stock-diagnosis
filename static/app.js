@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const holdingsTableBody = document.getElementById('holdingsTableBody');
     const holdingCountBadge = document.getElementById('holdingCountBadge');
     const btnAddRow = document.getElementById('btnAddRow');
+    const btnAutoFix = document.getElementById('btnAutoFix');
     const btnClearAll = document.getElementById('btnClearAll');
     const btnDiagnose = document.getElementById('btnDiagnose');
     
@@ -69,6 +70,25 @@ document.addEventListener('DOMContentLoaded', () => {
         "力積電": "6770", "力精電": "6770", "力精电": "6770", "力桔電": "6770", "力積电": "6770", "力积電": "6770", "力积电": "6770", "力電": "6770", "力电": "6770", "力積": "6770", "力积": "6770", "力精": "6770",
         "元大台灣50": "0050", "台灣50": "0050", "國泰永續高股息": "00878", "永續高股息": "00878",
         "復華台灣科技優息": "00929", "科技優息": "00929", "群益台灣精選高息": "00919", "元大台灣價值高息": "00940"
+    };
+
+    // Disambiguation Hints & Industry Labels for Easily Confused Stocks
+    const STOCK_HINTS = {
+        "1303": { tag: "台塑塑膠", class: "tag-plastic" },
+        "2408": { tag: "DRAM記憶體", class: "tag-semicon" },
+        "0056": { tag: "高股息ETF", class: "tag-etf" },
+        "0050": { tag: "市值型ETF", class: "tag-etf" },
+        "00923": { tag: "低碳ESG ETF", class: "tag-etf" },
+        "00403A": { tag: "主動型ETF", class: "tag-etf" },
+        "8069": { tag: "電子紙龍頭", class: "" },
+        "2330": { tag: "晶圓代工龍頭", class: "tag-semicon" },
+        "6770": { tag: "晶圓代工", class: "tag-semicon" },
+        "1216": { tag: "食品龍頭", class: "" },
+        "1432": { tag: "休閒紡織", class: "" },
+        "2317": { tag: "電子代工龍頭", class: "" },
+        "2454": { tag: "IC設計龍頭", class: "tag-semicon" },
+        "3008": { tag: "光學鏡頭龍頭", class: "" },
+        "2603": { tag: "貨櫃航運", class: "" }
     };
 
     // Load Stock Database (2,756 TW stocks & ETFs)
@@ -179,9 +199,11 @@ document.addEventListener('DOMContentLoaded', () => {
         suggestions.forEach(item => {
             const row = document.createElement('div');
             row.className = 'suggestion-item';
+            const hint = STOCK_HINTS[item.code];
+            const tagHtml = hint ? `<span class="suggestion-tag ${hint.class || ''}">${hint.tag}</span>` : '';
             row.innerHTML = `
                 <span class="suggestion-code">${item.code}</span>
-                <span class="suggestion-name">${item.name}</span>
+                <span class="suggestion-name">${item.name} ${tagHtml}</span>
             `;
             row.addEventListener('mousedown', (e) => {
                 e.preventDefault();
@@ -376,11 +398,119 @@ document.addEventListener('DOMContentLoaded', () => {
         return currentHoldings;
     }
 
-    // Add & Clear buttons
+    // Smart Auto-Fix & Debug Holdings (Foolproofing & Sanity Calibration)
+    function autoFixAndDebugHoldings(silent = false) {
+        syncHoldingsFromTable();
+        if (currentHoldings.length === 0) {
+            if (!silent) showNotification('目前無持股資料可校驗。');
+            return;
+        }
+
+        let fixesCount = 0;
+        let details = [];
+
+        // 1. Filter out completely empty rows
+        const initialCount = currentHoldings.length;
+        let cleaned = currentHoldings.filter(h => (h.code && h.code.trim() !== '') || (h.name && h.name.trim() !== ''));
+        if (cleaned.length < initialCount) {
+            fixesCount += (initialCount - cleaned.length);
+            details.push(`清除 ${initialCount - cleaned.length} 筆空白列`);
+        }
+
+        // 2. Fix code/name pairs, typos, decimal costs and shares
+        cleaned.forEach(h => {
+            let code = (h.code || '').trim();
+            let name = (h.name || '').trim();
+
+            // Suffix check: if user entered '2408' but name was '南亞', fix to '南亞科'
+            // If user entered '1303' but name was '南亞科', fix code to '2408'
+            if (code === '2408' && (name === '南亞' || name === '南亚')) {
+                name = '南亞科';
+                fixesCount++;
+                details.push('修正 2408 名稱為「南亞科」');
+            } else if (code === '1303' && (name === '南亞科' || name === '南亚科')) {
+                code = '2408';
+                name = '南亞科';
+                fixesCount++;
+                details.push('修正南亞科代號為「2408」');
+            } else if (code === '0056' && (name === '元太' || name === '元太高股息')) {
+                name = '元大高股息';
+                fixesCount++;
+                details.push('修正 0056 名稱為「元大高股息」');
+            } else if (code === '8069' && (name.includes('高股息') || name.includes('ETF'))) {
+                code = '0056';
+                name = '元大高股息';
+                fixesCount++;
+                details.push('修正高股息代號為「0056」');
+            }
+
+            // Standard DB cross-resolution
+            if (stockCodeToName[code]) {
+                name = stockCodeToName[code];
+            } else if (stockNameToCode[name]) {
+                code = stockNameToCode[name];
+                fixesCount++;
+                details.push(`自動補齊代號 ${code} (${name})`);
+            }
+
+            h.code = code;
+            h.name = name;
+
+            // Cost decimal auto-fix
+            const oldCost = h.cost;
+            h.cost = fixTaiwanStockCost(h.code, h.cost);
+            if (oldCost && Math.abs(h.cost - oldCost) > 0.01) {
+                fixesCount++;
+                details.push(`校正 ${h.name || h.code} 成本 $${oldCost} → $${h.cost}`);
+            }
+
+            // Shares auto-fix
+            if (!h.shares || h.shares <= 0) {
+                h.shares = 1000;
+                fixesCount++;
+                details.push(`修正 ${h.name || h.code} 股數為 1,000 股`);
+            }
+        });
+
+        // 3. Merge duplicate stock codes (Weighted average cost!)
+        const mergedMap = {};
+        cleaned.forEach(h => {
+            const c = h.code.trim();
+            if (!c) return;
+            if (!mergedMap[c]) {
+                mergedMap[c] = { ...h };
+            } else {
+                const prev = mergedMap[c];
+                const totalShares = prev.shares + h.shares;
+                const weightedCost = totalShares > 0 ? ((prev.cost * prev.shares + h.cost * h.shares) / totalShares) : prev.cost;
+                prev.shares = totalShares;
+                prev.cost = parseFloat(weightedCost.toFixed(2));
+                fixesCount++;
+                details.push(`自動加權合併重複代號 ${prev.code} ${prev.name} (總股數 ${totalShares.toLocaleString()} 股，均價 $${prev.cost})`);
+            }
+        });
+
+        currentHoldings = Object.values(mergedMap);
+        renderHoldingsTable();
+
+        if (!silent) {
+            if (fixesCount > 0) {
+                showNotification(`🛡️ 智慧防呆除錯完成！共修正 ${fixesCount} 項：${details.join('、')}`);
+            } else {
+                showNotification('✅ 持股數據結構完整無虞，已通過全部防呆校驗！');
+            }
+        }
+    }
+
+    // Add, Auto-Fix & Clear buttons
     btnAddRow.addEventListener('click', () => {
         currentHoldings.push({ code: '', name: '', cost: '', shares: 1000 });
         renderHoldingsTable();
     });
+
+    if (btnAutoFix) {
+        btnAutoFix.addEventListener('click', () => autoFixAndDebugHoldings(false));
+    }
 
     btnClearAll.addEventListener('click', () => {
         if (confirm('確定要清空目前清單嗎？')) {
@@ -746,7 +876,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 5. Run Full Diagnosis
     btnDiagnose.addEventListener('click', async () => {
-        syncHoldingsFromTable();
+        autoFixAndDebugHoldings(true);
         const validHoldings = currentHoldings.filter(h => h.code && h.code.trim() !== '');
 
         if (validHoldings.length === 0) {
@@ -877,9 +1007,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
 
-                <!-- DECISION BANNER (Display Code + Chinese Name) -->
+                <!-- DECISION BANNER (Display Code + Chinese Name + Smart Money Chip Signal) -->
                 <div class="decision-banner ${bannerColorClass}">
-                    <div class="decision-main-rating">${stock.rating_label} ｜ ${fullStockTitle}</div>
+                    <div class="decision-header-row">
+                        <div class="decision-main-rating">${stock.rating_label} ｜ ${fullStockTitle}</div>
+                        ${stock.chip_signal_title ? `<span class="chip-status-pill tag-${stock.chip_signal_badge || 'emerald'}"><i class="fa-solid fa-chart-line"></i> ${stock.chip_signal_title}</span>` : ''}
+                    </div>
                     <div class="decision-text">${stock.action_reason}</div>
                 </div>
 

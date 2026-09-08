@@ -1167,6 +1167,37 @@ kbd {
     font-weight: 600;
     color: #f8fafc;
     font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.suggestion-tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(99, 102, 241, 0.2);
+    color: #a5b4fc;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    font-weight: 500;
+}
+
+.suggestion-tag.tag-plastic {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fcd34d;
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
+.suggestion-tag.tag-semicon {
+    background: rgba(16, 185, 129, 0.2);
+    color: #6ee7b7;
+    border-color: rgba(16, 185, 129, 0.4);
+}
+
+.suggestion-tag.tag-etf {
+    background: rgba(56, 189, 248, 0.2);
+    color: #7dd3fc;
+    border-color: rgba(56, 189, 248, 0.4);
 }
 
 .stock-name-title {
@@ -1176,6 +1207,45 @@ kbd {
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+.decision-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.chip-status-pill {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.chip-status-pill.tag-rose {
+    background: rgba(244, 63, 94, 0.25);
+    color: #fca5a5;
+    border-color: rgba(244, 63, 94, 0.4);
+}
+
+.chip-status-pill.tag-emerald {
+    background: rgba(16, 185, 129, 0.25);
+    color: #6ee7b7;
+    border-color: rgba(16, 185, 129, 0.4);
+}
+
+.chip-status-pill.tag-amber {
+    background: rgba(245, 158, 11, 0.25);
+    color: #fcd34d;
+    border-color: rgba(245, 158, 11, 0.4);
 }
 
 /* IMPORT SUCCESS MODAL STYLES */

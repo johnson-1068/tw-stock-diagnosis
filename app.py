@@ -254,6 +254,58 @@ def fetch_single_stock(code: str, name: str = "", cost: float = 0.0, shares: int
     dist_ma60_pct = ((current_price - ma60) / ma60) * 100
     dist_high60_pct = ((high60 - current_price) / high60) * 100
     vol_ratio = (volume / vol_ma20) * 100 if vol_ma20 > 0 else 100
+
+    # -------------------------------------------------------------
+    # K-Line Morphology & Smart Money / Chip Behavior Analysis
+    # (主力誘多 vs 主力洗盤 vs 帶量真突破 vs 破位轉弱)
+    # -------------------------------------------------------------
+    high_val = float(df["High"].iloc[-1]) if not df.empty else current_price
+    low_val = float(df["Low"].iloc[-1]) if not df.empty else current_price
+    open_val = float(df["Open"].iloc[-1]) if not df.empty else current_price
+    candle_range = max(0.01, high_val - low_val)
+    upper_shadow = max(0.0, high_val - max(open_val, current_price))
+    upper_shadow_ratio = upper_shadow / candle_range
+
+    # Core Smart Money Signals
+    is_bull_trap = False
+    is_shakeout = False
+    is_real_breakout = False
+    is_breakdown = False
+
+    if dist_high60_pct <= 3.5 and vol_ratio >= 120 and (change_pct <= 1.2 or upper_shadow_ratio >= 0.40):
+        is_bull_trap = True
+    elif current_price >= ma20 * 0.98 and vol_ratio <= 75 and (-3.5 <= change_pct <= 0.8):
+        is_shakeout = True
+    elif current_price >= high60 * 0.995 and vol_ratio >= 130 and change_pct >= 2.0 and upper_shadow_ratio < 0.35:
+        is_real_breakout = True
+    elif current_price < ma20 and dist_ma20_pct < -2.0:
+        is_breakdown = True
+
+    if is_bull_trap:
+        chip_signal_title = "⚠️ 主力高檔誘多警訊"
+        chip_signal_desc = "前高附近放量滯漲或衝高回落留長上影，警惕主力高檔派發出貨！口訣：高點放量卻不漲動，急拉站不穩要警惕。"
+        chip_signal_badge = "rose"
+        chip_pass = False
+    elif is_real_breakout:
+        chip_signal_title = "🚀 帶量強勢真突破"
+        chip_signal_desc = "實體紅K突破前高壓力區，量價俱揚，主力主升段動能強勁！"
+        chip_signal_badge = "emerald"
+        chip_pass = True
+    elif is_shakeout:
+        chip_signal_title = "🧹 主力量縮洗盤沉澱"
+        chip_signal_desc = "上升途中縮量回檔，清洗浮籌與跟風盤，未見主力出貨跡象，守穩月線支撐可續抱/回踩加碼。"
+        chip_signal_badge = "emerald"
+        chip_pass = True
+    elif is_breakdown:
+        chip_signal_title = "🔴 跌破關鍵支撐"
+        chip_signal_desc = "跌破 20MA 月線關鍵防守位，趨勢轉弱。口訣：跌破關鍵位置別猶豫，應果斷停損控制風險。"
+        chip_signal_badge = "rose"
+        chip_pass = False
+    else:
+        chip_signal_title = "🛡️ 多空常態量價結構"
+        chip_signal_desc = "處於常態均線軌道中，量價平衡，維持原定保本與停利策略。"
+        chip_signal_badge = "amber"
+        chip_pass = True
     
     # 5 Action Ratings
     rating = "STRONG_HOLD"
@@ -262,29 +314,35 @@ def fetch_single_stock(code: str, name: str = "", cost: float = 0.0, shares: int
     action_reason = "股價位於月季線之上，量價結構健康，建議續抱並設定移動保本。"
     urgency_level = 3
     
-    if pnl_pct <= -7.0 or (current_price < ma20 and dist_ma20_pct < -3.0):
+    if is_bull_trap:
+        rating = "TAKE_PROFIT"
+        rating_label = "🔴 警戒誘多 / 分批停利"
+        rating_color = "amber"
+        action_reason = "【主力高檔誘多警訊】：前高附近放量卻滯漲（或衝高回落留長上影線），符合主力誘多出貨特徵！切勿追高，建議分批獲利了結 1/2 部位，跌破關鍵支撐果斷離場。"
+        urgency_level = 1
+    elif is_breakdown or pnl_pct <= -7.0 or (current_price < ma20 and dist_ma20_pct < -3.0):
         rating = "STOP_LOSS"
         rating_label = "🔴 嚴格停損出清"
         rating_color = "rose"
         action_reason = f"已達個人硬停損標準或跌破 20MA 轉弱 (損益 {pnl_pct:.2f}%)，切勿拗單，應果斷執行停損控制風險。"
         urgency_level = 1
+    elif is_real_breakout or (dist_ma20_pct >= 0 and dist_ma20_pct <= 3.5 and vol_ratio >= 130 and change_pct > 1.5):
+        rating = "BUY_ADD"
+        rating_label = "🟢 觸發加碼買進"
+        rating_color = "emerald"
+        action_reason = "【帶量強勢真突破】：帶量突破壓力區或回測 20MA 守穩出紅K，具備主力主升段動能，可於設定價位伺機加碼 20%~30% 部位。"
+        urgency_level = 2
     elif pnl_pct >= 18.0 and dist_high60_pct <= 2.0:
         rating = "TAKE_PROFIT"
         rating_label = "🔴 觸發停利落袋"
         rating_color = "amber"
         action_reason = f"獲利已達 +{pnl_pct:.1f}% 且面臨前波壓力位 ({high60:.1f}元)，建議分批獲利了結 1/2 部位，鎖住利潤。"
         urgency_level = 1
-    elif dist_ma20_pct >= 0 and dist_ma20_pct <= 3.5 and vol_ratio >= 130 and change_pct > 1.5:
-        rating = "BUY_ADD"
-        rating_label = "🟢 觸發加碼買進"
-        rating_color = "emerald"
-        action_reason = f"帶量轉強突破或回測 20MA 守穩出紅K，具備動能攻擊特徵，可於設定價位伺機加碼 20%~30% 部位。"
-        urgency_level = 2
-    elif dist_high60_pct < 3.0 and vol_ratio < 70:
+    elif is_shakeout or (dist_high60_pct < 3.0 and vol_ratio < 70):
         rating = "WATCH_TRIM"
-        rating_label = "🟡 觀望洗盤 / 減碼警戒"
+        rating_label = "🟡 量縮洗盤 / 守穩續抱"
         rating_color = "yellow"
-        action_reason = f"逼近前高壓力區 ({high60:.1f}元) 但量能明顯萎縮，多空交戰洗盤中，嚴禁追高，可微幅調節部位。"
+        action_reason = "【主力量縮洗盤】：上升途中量縮回檔清洗浮籌，多空交戰洗盤中，嚴禁追高，守穩月線支撐可續抱或逢回承接。"
         urgency_level = 2
     else:
         if pnl_pct > 0:
@@ -329,6 +387,12 @@ def fetch_single_stock(code: str, name: str = "", cost: float = 0.0, shares: int
             "pass": bool(vol_ratio > 70 or (vol_ratio < 65 and current_price >= ma20))
         },
         {
+            "dimension": "主力籌碼意圖",
+            "val": f"{chip_signal_title} (量比 {vol_ratio:.0f}%)",
+            "desc": chip_signal_desc,
+            "pass": chip_pass
+        },
+        {
             "dimension": "前高反壓",
             "val": f"近60日高點: {high60:.1f} 元 (距壓力 {dist_high60_pct:.1f}%)",
             "desc": "突破歷史/波段新高，無套牢賣壓" if dist_high60_pct <= 0.5 else ("逼近前高重壓區" if dist_high60_pct < 3.0 else "上方仍有足夠上漲空間"),
@@ -366,6 +430,9 @@ def fetch_single_stock(code: str, name: str = "", cost: float = 0.0, shares: int
         "rating_color": rating_color,
         "action_reason": action_reason,
         "urgency_level": urgency_level,
+        "chip_signal_title": chip_signal_title,
+        "chip_signal_badge": chip_signal_badge,
+        "chip_signal_desc": chip_signal_desc,
         "hard_stop_loss": hard_stop_loss,
         "breakeven_price": breakeven_price,
         "breakeven_status": breakeven_status,
