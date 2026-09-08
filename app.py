@@ -155,22 +155,19 @@ def fetch_taiex_market():
         }
 
 def resolve_stock_name(code: str, user_name: str = "") -> str:
-    """Resolve the most accurate stock name for a given code"""
+    """Prioritize stock code as primary source of truth"""
     code = str(code).strip()
     user_name = str(user_name).strip() if user_name else ""
     
-    # 1. Lookup in TW stock database
+    # 1. Primary: Lookup official canonical name by stock code
     if code in STOCK_CODE_TO_NAME and STOCK_CODE_TO_NAME[code]:
-        # If user gave a custom specific name that isn't placeholder and differs from code
-        if user_name and user_name != "未知個股" and not user_name.startswith("股票 ") and user_name != code:
-            return user_name
         return STOCK_CODE_TO_NAME[code]
         
-    # 2. If user gave a specific non-placeholder name
-    if user_name and user_name != "未知個股" and not user_name.startswith("股票 "):
+    # 2. If code not found in database but user name is given
+    if user_name and user_name != "未知個股" and not user_name.startswith("股票 ") and user_name != code:
         return user_name
         
-    # 3. Fallback clean code
+    # 3. Fallback to code
     return code
 
 def fetch_single_stock(code: str, name: str = "", cost: float = 0.0, shares: int = 1000):

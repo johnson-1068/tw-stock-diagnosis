@@ -242,8 +242,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         currentHoldings.forEach((item, idx) => {
-            // Auto resolve name if available
-            if ((!item.name || item.name.startsWith('股票 ') || item.name === item.code) && stockCodeToName[item.code]) {
+            // PRIORITY 1: Stock Code is the single source of truth
+            if (item.code && stockCodeToName[item.code]) {
+                item.name = stockCodeToName[item.code];
+            } else if ((!item.name || item.name.startsWith('股票 ') || item.name === item.code) && stockCodeToName[item.code]) {
                 item.name = stockCodeToName[item.code];
             }
 
@@ -422,35 +424,17 @@ document.addEventListener('DOMContentLoaded', () => {
             let code = (h.code || '').trim();
             let name = (h.name || '').trim();
 
-            // Suffix check: if user entered '2408' but name was '南亞', fix to '南亞科'
-            // If user entered '1303' but name was '南亞科', fix code to '2408'
-            if (code === '2408' && (name === '南亞' || name === '南亚')) {
-                name = '南亞科';
-                fixesCount++;
-                details.push('修正 2408 名稱為「南亞科」');
-            } else if (code === '1303' && (name === '南亞科' || name === '南亚科')) {
-                code = '2408';
-                name = '南亞科';
-                fixesCount++;
-                details.push('修正南亞科代號為「2408」');
-            } else if (code === '0056' && (name === '元太' || name === '元太高股息')) {
-                name = '元大高股息';
-                fixesCount++;
-                details.push('修正 0056 名稱為「元大高股息」');
-            } else if (code === '8069' && (name.includes('高股息') || name.includes('ETF'))) {
-                code = '0056';
-                name = '元大高股息';
-                fixesCount++;
-                details.push('修正高股息代號為「0056」');
-            }
-
-            // Standard DB cross-resolution
-            if (stockCodeToName[code]) {
+            // PRIORITY 1: If valid stock code exists, CODE DICTATES the official stock name
+            if (code && stockCodeToName[code]) {
+                if (name && name !== stockCodeToName[code]) {
+                    fixesCount++;
+                    details.push(`以代號 ${code} 為準，名稱同步為「${stockCodeToName[code]}」`);
+                }
                 name = stockCodeToName[code];
-            } else if (stockNameToCode[name]) {
+            } else if (!code && name && stockNameToCode[name]) {
                 code = stockNameToCode[name];
                 fixesCount++;
-                details.push(`自動補齊代號 ${code} (${name})`);
+                details.push(`以名稱「${name}」補齊代號 ${code}`);
             }
 
             h.code = code;
@@ -653,7 +637,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (data.success && data.holdings && data.holdings.length > 0) {
                         currentHoldings = data.holdings;
                         currentHoldings.forEach(h => {
-                            if (!h.name || h.name.startsWith('股票 ') || h.name === h.code) {
+                            // PRIORITY 1: Stock Code is the single source of truth
+                            if (h.code && stockCodeToName[h.code]) {
+                                h.name = stockCodeToName[h.code];
+                            } else if (!h.name || h.name.startsWith('股票 ') || h.name === h.code) {
                                 h.name = stockCodeToName[h.code] || stockNameToCode[h.code] || h.name || h.code;
                             }
                         });

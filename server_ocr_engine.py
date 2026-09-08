@@ -179,14 +179,23 @@ def process_brokerage_image(image_bytes_or_path):
         found_code = None
         found_name = None
         
-        # Method A: Name in full row text
-        line_clean = re.sub(r'[\s\-_,.:;]+', '', line)
-        for n in sorted_names:
-            n_clean = re.sub(r'[\s\-_,.:;]+', '', n)
-            if len(n_clean) >= 2 and n_clean.lower() in line_clean.lower():
-                found_code = name_to_code[n]
-                found_name = code_to_name.get(found_code, n)
+        # Method 0 (PRIORITY 1): Check if row text contains a direct stock code
+        code_matches = re.findall(r'\b([0-9]{4,6}[A-Z]?)\b', line)
+        for cm in code_matches:
+            if cm in code_to_name:
+                found_code = cm
+                found_name = code_to_name[cm]
                 break
+        
+        # Method A: Name in full row text
+        if not found_code:
+            line_clean = re.sub(r'[\s\-_,.:;]+', '', line)
+            for n in sorted_names:
+                n_clean = re.sub(r'[\s\-_,.:;]+', '', n)
+                if len(n_clean) >= 2 and n_clean.lower() in line_clean.lower():
+                    found_code = name_to_code[n]
+                    found_name = code_to_name.get(found_code, n)
+                    break
                 
         # Method B: Match from nearest commodity crop box by Y
         if not found_code and col_stocks:
