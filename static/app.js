@@ -732,11 +732,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const extracted = [];
         const sortedNames = Object.keys(stockNameToCode).sort((a, b) => b.length - a.length);
 
-        // 1. Find all stock names and their positions in full text (Space-Tolerant)
+        // 1. Find all stock names and their positions in full text (Space-Tolerant, Same-Line Only)
         const matches = [];
         sortedNames.forEach(name => {
             const chars = name.split('').map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-            const pattern = chars.join('\\s*');
+            // Use [^\S\r\n]* (horizontal whitespace only) so characters NEVER match across newlines!
+            const pattern = chars.join('[^\\S\\r\\n]*');
             const regex = new RegExp(pattern, 'gi');
             let m;
             while ((m = regex.exec(text)) !== null) {
@@ -752,6 +753,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (name === '元太' || name === '元大') {
                     const after = text.substring(m.index + matchLen, m.index + matchLen + 8).replace(/\s+/g, '');
                     if (after.startsWith('高股息') || after.startsWith('高息') || after.startsWith('高股') || after.startsWith('股息') || after.startsWith('台灣50') || after.startsWith('50')) {
+                        continue;
+                    }
+                }
+                // SPECIAL SUBSTRING COLLISION CHECK: If name is '台南', make sure it's not a cross-name bridge
+                if (name === '台南') {
+                    const before = text.substring(Math.max(0, m.index - 6), m.index).replace(/\s+/g, '');
+                    const after = text.substring(m.index + matchLen, m.index + matchLen + 6).replace(/\s+/g, '');
+                    if (before.includes('群益') || after.startsWith('亞') || after.startsWith('亚') || after.startsWith('積') || after.startsWith('积') || after.includes('ESG') || after.includes('低碳')) {
                         continue;
                     }
                 }
@@ -785,6 +794,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Filter out phantom 8069 (元太) if 0056 (元大高股息) or 0050 is present nearby
         if (cleanMatches.some(m => m.code === '0056' || m.code === '0050')) {
             cleanMatches = cleanMatches.filter(m => m.code !== '8069');
+        }
+
+        // Filter out phantom 1473 (台南) if 00923 / 1303 / 2408 / 2330 is present
+        if (cleanMatches.some(m => ['00923', '1303', '2408', '2330'].includes(m.code))) {
+            cleanMatches = cleanMatches.filter(m => m.code !== '1473');
         }
 
         // 2. Process each stock's text chunk (spanning all lines until next stock)
