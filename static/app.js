@@ -812,49 +812,62 @@ document.addEventListener('DOMContentLoaded', () => {
             const tokens = chunkClean.match(/[-+]?\d*\.?\d+/g) || [];
             const numbers = tokens.map(t => parseFloat(t)).filter(n => !isNaN(n));
 
-            // 1. Determine shares: look for two adjacent identical numbers (庫存可用 == 即時庫存) or valid integer token
+            // 1. Determine Unit Cost & Large Total Cost
+            const decCands = tokens.filter(t => t.includes('.') && parseFloat(t) >= 5.0 && parseFloat(t) <= 3500.0).map(t => parseFloat(t));
+            let unitCost = 0.0;
+            if (decCands.length >= 2) {
+                // Usually [breakeven, avg_cost, market_price], decCands[1] is 平均成本
+                unitCost = decCands[1];
+            } else if (decCands.length === 1) {
+                unitCost = decCands[0];
+            }
+
+            // Find large total cost numbers (>= 10,000)
+            const largeTotals = numbers.filter(n => n >= 10000 && !tokens.some(t => t.includes('.') && parseFloat(t) === n));
+            let totalCost = largeTotals.length > 0 ? largeTotals[largeTotals.length - 1] : 0;
+
+            // 2. Determine Shares
             let shares = 1000;
+            // A. Check adjacent identical integers (庫存可用 == 即時庫存)
             for (let i = 0; i < numbers.length - 1; i++) {
                 if (numbers[i] === numbers[i + 1] && numbers[i] >= 1 && numbers[i] <= 10000000) {
                     shares = Math.round(numbers[i]);
                     break;
                 }
             }
-            if (shares === 1000) {
-                const intCands = tokens.filter(t => !t.includes('.') && parseInt(t) >= 1 && parseInt(t) <= 1000000).map(t => parseInt(t));
-                if (intCands.length > 0) {
-                    shares = intCands[0];
+
+            // B. If shares is small (e.g. 2, 5, 10) or not found, but we have totalCost and unitCost:
+            if (totalCost > 0 && unitCost > 0) {
+                const calcShares = Math.round(totalCost / unitCost);
+                if (calcShares >= 1 && calcShares <= 10000000) {
+                    shares = calcShares;
                 }
+            } else if (shares > 0 && shares < 50 && m.code !== '1432') {
+                // If OCR lost trailing zeros on 2,000 / 5,000 / 10,000:
+                shares = shares * 1000;
             }
 
-            // 2. Determine cost: use Total Cost / Shares invariant first
-            let cost = 0.0;
-            for (let n of numbers) {
-                if (n >= 10 && shares > 0) {
-                    let unit = n / shares;
-                    if (m.code.startsWith('00') && unit >= 8.0 && unit <= 250.0) {
-                        cost = parseFloat(unit.toFixed(2));
-                    } else if (['2330', '2454', '3008', '6669', '3661', '5274', '3529', '2382'].includes(m.code) && unit >= 300.0 && unit <= 4000.0) {
-                        cost = parseFloat(unit.toFixed(2));
-                    } else if (!m.code.startsWith('00') && unit >= 8.0 && unit <= 2000.0) {
-                        cost = parseFloat(unit.toFixed(2));
+            // 3. Determine Cost
+            let cost = unitCost;
+            if (cost === 0.0 && totalCost > 0 && shares > 0) {
+                cost = parseFloat((totalCost / shares).toFixed(2));
+            }
+            if (cost === 0.0) {
+                for (let n of numbers) {
+                    if (n >= 10000 && shares > 0) {
+                        let unit = n / shares;
+                        if (unit >= 8.0 && unit <= 3000.0) {
+                            cost = parseFloat(unit.toFixed(2));
+                            break;
+                        }
                     }
                 }
             }
 
-            // 3. Fallback: if total cost invariant didn't trigger, look at decimal candidates
-            if (cost === 0.0) {
-                const decCands = tokens.filter(t => t.includes('.') && parseFloat(t) >= 1.0 && parseFloat(t) <= 3500.0).map(t => parseFloat(t));
-                if (decCands.length >= 2) {
-                    cost = decCands[1]; // 平均成本
-                } else if (decCands.length === 1) {
-                    cost = decCands[0];
-                } else if (numbers.length >= 2) {
-                    cost = numbers[1];
-                }
+            // Fallback decimal candidate
+            if (cost === 0.0 && decCands.length > 0) {
+                cost = decCands[0];
             }
-
-            // 4. Smart Auto-Decimal Correction (e.g. 3843 -> 38.43, 7512 -> 75.12, 35534 -> 355.34)
             cost = fixTaiwanStockCost(m.code, cost);
 
             extracted.push({
