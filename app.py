@@ -735,21 +735,16 @@ def run_diagnosis():
 
 @app.route("/api/upload-screenshot", methods=["POST"])
 def upload_screenshot():
-    """High-accuracy server-side AI OCR endpoint for stock screenshots"""
+    """High-accuracy server-side AI OCR endpoint for stock screenshots with broker auto-detection"""
     try:
-        from server_ocr_engine import process_brokerage_image
+        from server_ocr_engine import process_brokerage_image, DEFAULT_BROKER
         
         # 1. Multipart form upload
-        if 'image' in request.files:
-            file = request.files['image']
+        if 'image' in request.files or 'file' in request.files:
+            file = request.files.get('image') or request.files.get('file')
             img_bytes = file.read()
-            holdings = process_brokerage_image(img_bytes)
-            return jsonify({"success": True, "holdings": holdings, "count": len(holdings)})
-        elif 'file' in request.files:
-            file = request.files['file']
-            img_bytes = file.read()
-            holdings = process_brokerage_image(img_bytes)
-            return jsonify({"success": True, "holdings": holdings, "count": len(holdings)})
+            holdings, broker = process_brokerage_image(img_bytes, return_broker=True)
+            return jsonify({"success": True, "holdings": holdings, "count": len(holdings), "broker": broker})
             
         # 2. Base64 JSON upload
         data = request.get_json(silent=True) or {}
@@ -759,19 +754,27 @@ def upload_screenshot():
             if "," in img_str:
                 img_str = img_str.split(",")[1]
             img_bytes = base64.b64decode(img_str)
-            holdings = process_brokerage_image(img_bytes)
-            return jsonify({"success": True, "holdings": holdings, "count": len(holdings)})
+            holdings, broker = process_brokerage_image(img_bytes, return_broker=True)
+            return jsonify({"success": True, "holdings": holdings, "count": len(holdings), "broker": broker})
             
         return jsonify({"success": False, "error": "未收到圖片檔案"}), 400
     except Exception as e:
         logger.error(f"Upload OCR error: {e}", exc_info=True)
-        return jsonify({"success": False, "error": str(e), "holdings": []}), 200
+        return jsonify({"success": False, "error": str(e), "holdings": [], "broker": DEFAULT_BROKER}), 200
 
 @app.route("/api/presets", methods=["GET"])
 def get_presets():
     presets = {
         "screenshot_0907": {
-            "name": "9/7 券商庫存截圖實盤範例 (商品欄位/8檔持股)",
+            "name": "9/7 群益實盤庫存 (掌中財神/8檔實盤)",
+            "broker": {
+                "id": "capital",
+                "name": "群益證券 (掌中財神 / 一戶通)",
+                "short_name": "群益證券",
+                "icon": "fa-chart-pie",
+                "tag_class": "broker-capital",
+                "color": "#e11d48"
+            },
             "holdings": [
                 {"code": "00403A", "name": "主動統一升級50", "cost": 10.2, "shares": 5000},
                 {"code": "0056", "name": "元大高股息", "cost": 38.34, "shares": 10000},
@@ -783,8 +786,71 @@ def get_presets():
                 {"code": "6770", "name": "力積電", "cost": 75.12, "shares": 2000}
             ]
         },
+        "sinopac_dawho": {
+            "name": "永豐金證券「大戶投」APP 實盤範例 (高股息ETF與權值組)",
+            "broker": {
+                "id": "sinopac",
+                "name": "永豐金證券 (大戶投 APP)",
+                "short_name": "永豐大戶投",
+                "icon": "fa-vault",
+                "tag_class": "broker-sinopac",
+                "color": "#eab308"
+            },
+            "holdings": [
+                {"code": "00878", "name": "國泰永續高股息", "cost": 22.40, "shares": 15000},
+                {"code": "00919", "name": "群益台灣精選高息", "cost": 24.50, "shares": 10000},
+                {"code": "2330", "name": "台積電", "cost": 975.0, "shares": 1000},
+                {"code": "2890", "name": "永豐金", "cost": 24.20, "shares": 8000}
+            ]
+        },
+        "capital_trader": {
+            "name": "群益證券「掌中財神/一戶通」實盤範例 (多檔旗艦組合)",
+            "broker": {
+                "id": "capital",
+                "name": "群益證券 (掌中財神 / 一戶通)",
+                "short_name": "群益證券",
+                "icon": "fa-chart-pie",
+                "tag_class": "broker-capital",
+                "color": "#e11d48"
+            },
+            "holdings": [
+                {"code": "00403A", "name": "主動統一升級50", "cost": 10.2, "shares": 5000},
+                {"code": "0056", "name": "元大高股息", "cost": 38.34, "shares": 10000},
+                {"code": "00923", "name": "群益台ESG低碳50", "cost": 24.76, "shares": 12375},
+                {"code": "1303", "name": "南亞", "cost": 218.06, "shares": 1000},
+                {"code": "1432", "name": "大魯閣", "cost": 14.0, "shares": 1},
+                {"code": "2330", "name": "台積電", "cost": 1052.42, "shares": 2040},
+                {"code": "2408", "name": "南亞科", "cost": 355.34, "shares": 2000},
+                {"code": "6770", "name": "力積電", "cost": 75.12, "shares": 2000}
+            ]
+        },
+        "fubon_eplus": {
+            "name": "富邦證券「富邦e+」APP 實盤範例 (金融AI旗艦組)",
+            "broker": {
+                "id": "fubon",
+                "name": "富邦證券 (富邦e+ / 行動網)",
+                "short_name": "富邦e+",
+                "icon": "fa-building-columns",
+                "tag_class": "broker-fubon",
+                "color": "#0284c7"
+            },
+            "holdings": [
+                {"code": "2881", "name": "富邦金", "cost": 86.50, "shares": 6000},
+                {"code": "2330", "name": "台積電", "cost": 980.0, "shares": 1000},
+                {"code": "2382", "name": "廣達", "cost": 285.0, "shares": 2000},
+                {"code": "0050", "name": "元大台灣50", "cost": 182.50, "shares": 3000}
+            ]
+        },
         "yuanta_ai": {
-            "name": "元大「投資先生」APP 庫存截圖範例 (AI半導體主流組)",
+            "name": "元大證券「投資先生」APP 範例 (AI半導體主流組)",
+            "broker": {
+                "id": "yuanta",
+                "name": "元大證券 (投資先生 APP)",
+                "short_name": "元大投資先生",
+                "icon": "fa-user-tie",
+                "tag_class": "broker-yuanta",
+                "color": "#6366f1"
+            },
             "holdings": [
                 {"code": "2330", "name": "台積電", "cost": 945.0, "shares": 1000},
                 {"code": "2454", "name": "聯發科", "cost": 1320.0, "shares": 1000},
@@ -794,6 +860,14 @@ def get_presets():
         },
         "cathay_shipping": {
             "name": "國泰證券 APP 庫存截圖範例 (航運與重電權值組)",
+            "broker": {
+                "id": "cathay",
+                "name": "國泰證券 (國泰證券 APP)",
+                "short_name": "國泰證券",
+                "icon": "fa-tree",
+                "tag_class": "broker-cathay",
+                "color": "#10b981"
+            },
             "holdings": [
                 {"code": "2603", "name": "長榮", "cost": 196.0, "shares": 2000},
                 {"code": "2609", "name": "陽明", "cost": 68.5, "shares": 3000},
@@ -803,6 +877,14 @@ def get_presets():
         },
         "mitake_mixed": {
             "name": "三竹股市系統 庫存截圖範例 (多空混合考驗組)",
+            "broker": {
+                "id": "mitake",
+                "name": "三竹股市 (三竹資訊體系)",
+                "short_name": "三竹股市",
+                "icon": "fa-mobile-screen",
+                "tag_class": "broker-mitake",
+                "color": "#f59e0b"
+            },
             "holdings": [
                 {"code": "2330", "name": "台積電", "cost": 980.0, "shares": 1000},
                 {"code": "2603", "name": "長榮", "cost": 225.0, "shares": 1000},

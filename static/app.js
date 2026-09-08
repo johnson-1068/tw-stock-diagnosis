@@ -125,7 +125,101 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 2. Preset Data Handling
+    // 2. Broker Signatures & Auto-Detection Config
+    const BROKERS_CONFIG = [
+        {
+            id: 'sinopac',
+            name: '永豐金證券 (大戶投 APP)',
+            shortName: '永豐大戶投',
+            icon: 'fa-vault',
+            tagClass: 'broker-sinopac',
+            keywords: ['大戶投', '大户投', '永豐', '永丰', '永豐金', '永丰金', 'sinopac', 'dawho', 'DAWHO', '豐存股', '豐雲學堂', '未實現損益試算', '庫存總值', '即時損益']
+        },
+        {
+            id: 'capital',
+            name: '群益證券 (掌中財神 / 一戶通)',
+            shortName: '群益證券',
+            icon: 'fa-chart-pie',
+            tagClass: 'broker-capital',
+            keywords: ['群益', 'capital', 'Capital', 'CAPITAL', '掌中財神', '一戶通', '一户通', '智選贏家', '即時庫存損益', '整戶維持率', '付出成本', '損益平衡點', '損益平衡價', '庫存可用', '即時庫存']
+        },
+        {
+            id: 'fubon',
+            name: '富邦證券 (富邦e+ / 行動網)',
+            shortName: '富邦e+',
+            icon: 'fa-building-columns',
+            tagClass: 'broker-fubon',
+            keywords: ['富邦', 'fubon', 'Fubon', 'FUBON', '富邦e+', '富邦e點通', '富邦證券', '富邦證', '富邦金控', '富邦證券行動網', '庫存總覽', '未實現損益']
+        },
+        {
+            id: 'yuanta',
+            name: '元大證券 (投資先生 APP)',
+            shortName: '元大投資先生',
+            icon: 'fa-user-tie',
+            tagClass: 'broker-yuanta',
+            keywords: ['元大', '投資先生', '投资先生', 'yuanta', 'Yuanta', 'YUANTA', '元大證券', '元大證']
+        },
+        {
+            id: 'cathay',
+            name: '國泰證券 (國泰證券 APP)',
+            shortName: '國泰證券',
+            icon: 'fa-tree',
+            tagClass: 'broker-cathay',
+            keywords: ['國泰', '国泰', 'cathay', 'Cathay', 'CATHAY', '國泰證券', '國泰世華', '國泰金']
+        },
+        {
+            id: 'mitake',
+            name: '三竹股市 (三竹資訊體系)',
+            shortName: '三竹股市',
+            icon: 'fa-mobile-screen',
+            tagClass: 'broker-mitake',
+            keywords: ['三竹', 'mitake', 'Mitake', 'MITAKE', '行動券商', '三竹股市']
+        }
+    ];
+
+    const DEFAULT_BROKER_CLIENT = {
+        id: 'general',
+        name: '通用券商格式 (支援全台券商庫存)',
+        shortName: '券商實盤',
+        icon: 'fa-receipt',
+        tagClass: 'broker-general'
+    };
+
+    function detectBrokerFromTextClient(text) {
+        if (!text) return DEFAULT_BROKER_CLIENT;
+        const textLower = text.toLowerCase();
+        let bestBroker = DEFAULT_BROKER_CLIENT;
+        let maxScore = 0;
+
+        BROKERS_CONFIG.forEach(b => {
+            let score = 0;
+            b.keywords.forEach(kw => {
+                if (textLower.includes(kw.toLowerCase())) {
+                    score += (kw.length >= 3 ? 3 : 1);
+                }
+            });
+            if (score > maxScore) {
+                maxScore = score;
+                bestBroker = b;
+            }
+        });
+
+        return maxScore > 0 ? bestBroker : DEFAULT_BROKER_CLIENT;
+    }
+
+    function renderDetectedBrokerBadge(broker) {
+        const container = document.getElementById('detectedBrokerContainer');
+        if (!container) return;
+        const b = broker || DEFAULT_BROKER_CLIENT;
+        container.innerHTML = `
+            <div class="broker-badge-pill ${b.tagClass || b.tag_class || 'broker-general'}">
+                <i class="fa-solid ${b.icon || 'fa-building-columns'}"></i>
+                <span>券商來源：<strong>${b.name || b.shortName}</strong></span>
+            </div>
+        `;
+    }
+
+    // Preset Data Handling
     async function loadPreset(presetKey) {
         try {
             const res = await fetch('/api/presets');
@@ -138,6 +232,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
                 renderHoldingsTable();
+                if (presets[presetKey].broker) {
+                    renderDetectedBrokerBadge(presets[presetKey].broker);
+                }
                 showNotification(`已載入「${presets[presetKey].name}」`);
             }
         } catch (err) {
@@ -700,12 +797,18 @@ document.addEventListener('DOMContentLoaded', () => {
                                 h.name = stockCodeToName[h.code] || stockNameToCode[h.code] || h.name || h.code;
                             }
                         });
+                        if (data.broker) {
+                            renderDetectedBrokerBadge(data.broker);
+                        }
                         renderHoldingsTable();
                         ocrProgressFill.style.width = '100%';
                         serverParsed = true;
                         setTimeout(() => {
                             ocrOverlay.style.display = 'none';
                             showImportSuccessPrompt(currentHoldings);
+                            if (data.broker) {
+                                showNotification(`🎉 成功識別券商來源：${data.broker.name}！已為您精準解析 ${currentHoldings.length} 檔持股。`);
+                            }
                         }, 250);
                         return;
                     }
@@ -716,7 +819,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!serverParsed) {
                 // Fallback to client-side Tesseract.js
-                ocrStatusText.innerText = '正在執行本機影像辨識...';
+                ocrStatusText.innerText = '正在執行本機影像辨識與券商版面識別...';
                 ocrProgressFill.style.width = '70%';
 
                 const { data: { text } } = await Tesseract.recognize(file, 'chi_tra+eng', {
@@ -729,11 +832,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 console.log("Browser OCR Raw Text:\n", text);
+                const detectedBroker = detectBrokerFromTextClient(text);
+                renderDetectedBrokerBadge(detectedBroker);
                 const success = parseOcrTextToHoldings(text);
                 
                 if (!success) {
                     showNotification('已載入 9/7 券商實盤示範資料供快速編輯與診斷。');
                     loadPreset('screenshot_0907');
+                } else {
+                    showNotification(`🎉 成功識別券商：${detectedBroker.name}！`);
                 }
             }
 
@@ -807,6 +914,9 @@ document.addEventListener('DOMContentLoaded', () => {
             loadPreset('screenshot_0907');
             return;
         }
+
+        const detectedBroker = detectBrokerFromTextClient(text);
+        renderDetectedBrokerBadge(detectedBroker);
 
         const extracted = [];
         const sortedNames = Object.keys(stockNameToCode).sort((a, b) => b.length - a.length);

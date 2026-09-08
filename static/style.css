@@ -292,12 +292,16 @@ body {
     border-radius: var(--radius-full);
     cursor: pointer;
     transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .btn-preset:hover {
     background: rgba(99, 102, 241, 0.2);
     border-color: var(--accent-glow);
     color: #fff;
+    transform: translateY(-1px);
 }
 
 .btn-preset.highlight-preset {
@@ -311,6 +315,24 @@ body {
 .btn-preset.highlight-preset:hover {
     background: rgba(99, 102, 241, 0.45);
     box-shadow: 0 0 18px rgba(99, 102, 241, 0.55);
+}
+
+.btn-preset.broker-btn-sinopac:hover {
+    border-color: #eab308;
+    background: rgba(234, 179, 8, 0.15);
+    color: #fef08a;
+}
+
+.btn-preset.broker-btn-capital:hover {
+    border-color: #e11d48;
+    background: rgba(225, 29, 72, 0.15);
+    color: #fecdd3;
+}
+
+.btn-preset.broker-btn-fubon:hover {
+    border-color: #0284c7;
+    background: rgba(2, 132, 199, 0.15);
+    color: #bae6fd;
 }
 
 /* CARD HEADER & BODY */
@@ -394,10 +416,51 @@ kbd {
 
 .supported-tags span {
     font-size: 11px;
-    padding: 2px 10px;
+    padding: 3px 10px;
     border-radius: var(--radius-full);
     background: rgba(255, 255, 255, 0.05);
     color: var(--text-muted);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.2s ease;
+}
+
+.supported-tags span.tag-sinopac {
+    background: rgba(234, 179, 8, 0.08);
+    border-color: rgba(234, 179, 8, 0.25);
+    color: #fef08a;
+}
+
+.supported-tags span.tag-capital {
+    background: rgba(225, 29, 72, 0.08);
+    border-color: rgba(225, 29, 72, 0.25);
+    color: #fecdd3;
+}
+
+.supported-tags span.tag-fubon {
+    background: rgba(2, 132, 199, 0.08);
+    border-color: rgba(2, 132, 199, 0.25);
+    color: #bae6fd;
+}
+
+.supported-tags span.tag-yuanta {
+    background: rgba(99, 102, 241, 0.08);
+    border-color: rgba(99, 102, 241, 0.25);
+    color: #c7d2fe;
+}
+
+.supported-tags span.tag-cathay {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.25);
+    color: #a7f3d0;
+}
+
+.supported-tags span.tag-mitake {
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.25);
+    color: #fde68a;
 }
 
 /* OCR OVERLAY */
@@ -461,6 +524,14 @@ kbd {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 14px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.header-left-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
 .section-sub-header h3 {
@@ -478,6 +549,97 @@ kbd {
     border-radius: var(--radius-full);
     background: rgba(99, 102, 241, 0.15);
     color: var(--accent-glow);
+}
+
+/* DETECTED BROKER BADGES */
+.detected-broker-container {
+    display: flex;
+    align-items: center;
+}
+
+.broker-badge-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 14px;
+    border-radius: var(--radius-full);
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid var(--border-subtle);
+    backdrop-filter: blur(8px);
+    animation: fadeInSlide 0.3s ease-out;
+}
+
+@keyframes fadeInSlide {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.broker-badge-pill.broker-sinopac {
+    background: linear-gradient(135deg, rgba(234, 179, 8, 0.18), rgba(202, 138, 4, 0.08));
+    border: 1px solid rgba(234, 179, 8, 0.4);
+    color: #fef08a;
+    box-shadow: 0 0 12px rgba(234, 179, 8, 0.2);
+}
+.broker-badge-pill.broker-sinopac i {
+    color: #eab308;
+}
+
+.broker-badge-pill.broker-capital {
+    background: linear-gradient(135deg, rgba(225, 29, 72, 0.18), rgba(190, 18, 60, 0.08));
+    border: 1px solid rgba(225, 29, 72, 0.4);
+    color: #fecdd3;
+    box-shadow: 0 0 12px rgba(225, 29, 72, 0.2);
+}
+.broker-badge-pill.broker-capital i {
+    color: #e11d48;
+}
+
+.broker-badge-pill.broker-fubon {
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.18), rgba(3, 105, 161, 0.08));
+    border: 1px solid rgba(2, 132, 199, 0.4);
+    color: #bae6fd;
+    box-shadow: 0 0 12px rgba(2, 132, 199, 0.2);
+}
+.broker-badge-pill.broker-fubon i {
+    color: #0284c7;
+}
+
+.broker-badge-pill.broker-yuanta {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(79, 70, 229, 0.08));
+    border: 1px solid rgba(99, 102, 241, 0.4);
+    color: #c7d2fe;
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.2);
+}
+.broker-badge-pill.broker-yuanta i {
+    color: #818cf8;
+}
+
+.broker-badge-pill.broker-cathay {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(5, 150, 105, 0.08));
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    color: #a7f3d0;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
+}
+.broker-badge-pill.broker-cathay i {
+    color: #10b981;
+}
+
+.broker-badge-pill.broker-mitake {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(217, 119, 6, 0.08));
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    color: #fde68a;
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
+}
+.broker-badge-pill.broker-mitake i {
+    color: #f59e0b;
+}
+
+.broker-badge-pill.broker-general {
+    background: rgba(51, 65, 85, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: #cbd5e1;
 }
 
 .table-responsive {

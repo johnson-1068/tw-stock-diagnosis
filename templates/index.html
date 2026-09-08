@@ -61,11 +61,14 @@
                             <h2>持股資料匯入中心</h2>
                         </div>
                         <div class="preset-selector">
-                            <span class="text-muted"><i class="fa-solid fa-bolt"></i> 示範資料：</span>
-                            <button class="btn-preset highlight-preset" data-preset="screenshot_0907"><i class="fa-solid fa-star text-warning"></i> 9/7 券商實盤庫存 (8檔)</button>
-                            <button class="btn-preset" data-preset="yuanta_ai">元大「投資先生」</button>
-                            <button class="btn-preset" data-preset="cathay_shipping">國泰證券</button>
-                            <button class="btn-preset" data-preset="mitake_mixed">三竹股市</button>
+                            <span class="text-muted"><i class="fa-solid fa-building-columns"></i> 券商示範庫存：</span>
+                            <button class="btn-preset highlight-preset" data-preset="screenshot_0907"><i class="fa-solid fa-star text-warning"></i> 9/7 群益實盤 (8檔)</button>
+                            <button class="btn-preset broker-btn-sinopac" data-preset="sinopac_dawho"><i class="fa-solid fa-vault text-warning"></i> 永豐金「大戶投」</button>
+                            <button class="btn-preset broker-btn-capital" data-preset="capital_trader"><i class="fa-solid fa-chart-pie text-danger"></i> 群益「掌中財神」</button>
+                            <button class="btn-preset broker-btn-fubon" data-preset="fubon_eplus"><i class="fa-solid fa-building-columns text-info"></i> 富邦證券「富邦e+」</button>
+                            <button class="btn-preset" data-preset="yuanta_ai"><i class="fa-solid fa-user-tie"></i> 元大「投資先生」</button>
+                            <button class="btn-preset" data-preset="cathay_shipping"><i class="fa-solid fa-tree"></i> 國泰證券</button>
+                            <button class="btn-preset" data-preset="mitake_mixed"><i class="fa-solid fa-mobile-screen"></i> 三竹股市</button>
                         </div>
                     </div>
 
@@ -78,14 +81,14 @@
                                     <i class="fa-solid fa-cloud-arrow-up"></i>
                                 </div>
                                 <h3>拖曳或點擊上傳券商庫存截圖</h3>
-                                <p class="drop-hint">支援各大券商 App 截圖 ｜ 亦可直接在網頁任意處按 <kbd>Ctrl + V</kbd> 貼上</p>
+                                <p class="drop-hint">自動識別各大券商 App 截圖 ｜ 亦可直接在網頁任意處按 <kbd>Ctrl + V</kbd> 貼上</p>
                                 <div class="supported-tags">
-                                    <span>元大投資先生</span>
-                                    <span>國泰證券</span>
-                                    <span>富邦 e 點通</span>
-                                    <span>三竹系統</span>
-                                    <span>永豐大戶投</span>
-                                    <span>玉山證券</span>
+                                    <span class="tag-sinopac"><i class="fa-solid fa-vault"></i> 永豐金 大戶投</span>
+                                    <span class="tag-capital"><i class="fa-solid fa-chart-pie"></i> 群益 掌中財神 / 一戶通</span>
+                                    <span class="tag-fubon"><i class="fa-solid fa-building-columns"></i> 富邦證券 富邦e+</span>
+                                    <span class="tag-yuanta"><i class="fa-solid fa-user-tie"></i> 元大 投資先生</span>
+                                    <span class="tag-cathay"><i class="fa-solid fa-tree"></i> 國泰證券</span>
+                                    <span class="tag-mitake"><i class="fa-solid fa-mobile-screen"></i> 三竹股市體系</span>
                                 </div>
                             </div>
                             <!-- OCR Scanning Progress Overlay -->
@@ -101,8 +104,13 @@
                         <!-- HOLDINGS TABLE (AUTO-FILLED OR EDITABLE) -->
                         <div class="holdings-editor-section">
                             <div class="section-sub-header">
-                                <h3><i class="fa-solid fa-list-check"></i> 持股清單確認與微調</h3>
-                                <span class="badge-count" id="holdingCountBadge">0 檔持股</span>
+                                <div class="header-left-title">
+                                    <h3><i class="fa-solid fa-list-check"></i> 持股清單確認與微調</h3>
+                                    <span class="badge-count" id="holdingCountBadge">0 檔持股</span>
+                                </div>
+                                <div id="detectedBrokerContainer" class="detected-broker-container">
+                                    <!-- Dynamic Detected Broker Badge -->
+                                </div>
                             </div>
 
                             <div class="table-responsive">
@@ -300,6 +308,6 @@
     </div>
 
     <!-- SCRIPTS -->
-    <script src="/static/app.js?v=5.7.0"></script>
+    <script src="/static/app.js?v=5.8.0"></script>
 </body>
 </html>

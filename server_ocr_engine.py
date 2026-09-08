@@ -89,11 +89,112 @@ def fix_tw_stock_cost(code, raw_cost):
         c = c / 100.0
     return round(c, 2)
 
-def process_brokerage_image(image_bytes_or_path):
-    """Accurately parse Taiwan brokerage stock table screenshot"""
+BROKERS = [
+    {
+        "id": "sinopac",
+        "name": "永豐金證券 (大戶投 APP)",
+        "short_name": "永豐大戶投",
+        "icon": "fa-vault",
+        "tag_class": "broker-sinopac",
+        "color": "#eab308",
+        "keywords": [
+            "大戶投", "大户投", "永豐", "永丰", "永豐金", "永丰金", "sinopac", "dawho", "DAWHO",
+            "豐存股", "豐雲學堂", "未實現損益試算", "庫存總值", "即時損益"
+        ]
+    },
+    {
+        "id": "capital",
+        "name": "群益證券 (掌中財神 / 一戶通)",
+        "short_name": "群益證券",
+        "icon": "fa-chart-pie",
+        "tag_class": "broker-capital",
+        "color": "#e11d48",
+        "keywords": [
+            "群益", "capital", "Capital", "CAPITAL", "掌中財神", "一戶通", "一户通", "智選贏家",
+            "即時庫存損益", "整戶維持率", "付出成本", "損益平衡點", "損益平衡價", "庫存可用", "即時庫存"
+        ]
+    },
+    {
+        "id": "fubon",
+        "name": "富邦證券 (富邦e+ / 行動網)",
+        "short_name": "富邦e+",
+        "icon": "fa-building-columns",
+        "tag_class": "broker-fubon",
+        "color": "#0284c7",
+        "keywords": [
+            "富邦", "fubon", "Fubon", "FUBON", "富邦e+", "富邦e點通", "富邦證券", "富邦證",
+            "富邦金控", "富邦證券行動網", "庫存總覽", "未實現損益"
+        ]
+    },
+    {
+        "id": "yuanta",
+        "name": "元大證券 (投資先生 APP)",
+        "short_name": "元大投資先生",
+        "icon": "fa-user-tie",
+        "tag_class": "broker-yuanta",
+        "color": "#6366f1",
+        "keywords": [
+            "元大", "投資先生", "投资先生", "yuanta", "Yuanta", "YUANTA", "元大證券", "元大證"
+        ]
+    },
+    {
+        "id": "cathay",
+        "name": "國泰證券 (國泰證券 APP)",
+        "short_name": "國泰證券",
+        "icon": "fa-tree",
+        "tag_class": "broker-cathay",
+        "color": "#10b981",
+        "keywords": [
+            "國泰", "国泰", "cathay", "Cathay", "CATHAY", "國泰證券", "國泰世華", "國泰金"
+        ]
+    },
+    {
+        "id": "mitake",
+        "name": "三竹股市 (三竹資訊體系)",
+        "short_name": "三竹股市",
+        "icon": "fa-mobile-screen",
+        "tag_class": "broker-mitake",
+        "color": "#f59e0b",
+        "keywords": [
+            "三竹", "mitake", "Mitake", "MITAKE", "行動券商", "三竹股市"
+        ]
+    }
+]
+
+DEFAULT_BROKER = {
+    "id": "general",
+    "name": "通用券商格式 (支援全台券商庫存)",
+    "short_name": "券商實盤",
+    "icon": "fa-receipt",
+    "tag_class": "broker-general",
+    "color": "#64748b"
+}
+
+def detect_broker_from_text(text: str):
+    if not text:
+        return DEFAULT_BROKER
+    
+    text_lower = text.lower()
+    scores = {}
+    for b in BROKERS:
+        score = 0
+        for kw in b["keywords"]:
+            if kw.lower() in text_lower:
+                score += (3 if len(kw) >= 3 else 1)
+        if score > 0:
+            scores[b["id"]] = (score, b)
+            
+    if scores:
+        best = max(scores.values(), key=lambda x: x[0])[1]
+        return best
+        
+    return DEFAULT_BROKER
+
+def process_brokerage_image(image_bytes_or_path, return_broker=False):
+    """Accurately parse Taiwan brokerage stock table screenshot with broker auto-detection"""
     ocr = get_ocr_engine()
     if ocr is None:
-        return []
+        return ([], DEFAULT_BROKER) if return_broker else []
 
     if isinstance(image_bytes_or_path, (bytes, bytearray)):
         im = Image.open(io.BytesIO(image_bytes_or_path)).convert('RGB')
@@ -111,8 +212,11 @@ def process_brokerage_image(image_bytes_or_path):
     # 1. Full Image OCR
     full_res, _ = ocr(np.array(im))
     if not full_res:
-        return []
+        return ([], DEFAULT_BROKER) if return_broker else []
         
+    full_text = " ".join(item[1].strip() for item in full_res)
+    detected_broker = detect_broker_from_text(full_text)
+    
     boxes = []
     for item in full_res:
         box, text, score = item[0], item[1].strip(), float(item[2])
@@ -325,11 +429,13 @@ def process_brokerage_image(image_bytes_or_path):
     if any(h["code"] in ["00923", "1303", "2408", "2330"] for h in holdings):
         holdings = [h for h in holdings if h["code"] != "1473"]
         
+    if return_broker:
+        return holdings, detected_broker
     return holdings
 
 def extract_holdings_from_image(image_bytes_or_path):
-    holdings = process_brokerage_image(image_bytes_or_path)
-    return holdings, ""
+    holdings, broker = process_brokerage_image(image_bytes_or_path, return_broker=True)
+    return holdings, broker
 
 
 
